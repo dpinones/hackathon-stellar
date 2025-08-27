@@ -1,4 +1,4 @@
-import * as Client from 'increment';
+import * as Client from './../../packages/increment/dist/index';
 import { rpcUrl } from './util';
 
 export default new Client.Client({
