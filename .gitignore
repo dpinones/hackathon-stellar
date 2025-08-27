@@ -36,5 +36,5 @@ packages/*
 !packages/.gitkeep
 
 # generated contract client imports
-src/contracts/*
+# src/contracts/*
 !src/contracts/util.ts
