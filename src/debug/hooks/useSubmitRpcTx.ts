@@ -29,18 +29,33 @@ export const useSubmitRpcTx = () => {
       networkPassphrase,
       headers,
     }: SubmitRpcTxProps) => {
+      console.log("🌐 [SUBMIT RPC] Starting submission:", {
+        rpcUrl,
+        networkPassphrase,
+        headers,
+        xdrLength: transactionXdr?.length,
+      });
       try {
         const transaction = TransactionBuilder.fromXDR(
           transactionXdr,
           networkPassphrase,
         );
+        console.log("📦 [SUBMIT RPC] Transaction parsed:", transaction);
+
         const rpcServer = new StellarRpc.Server(rpcUrl, {
           headers: isEmptyObject(headers) ? undefined : { ...headers },
           allowHttp: new URL(rpcUrl).hostname === "localhost",
         });
+        console.log("🌐 [SUBMIT RPC] Created RPC server");
+
         const sentTx = await rpcServer.sendTransaction(transaction);
+        console.log("📤 [SUBMIT RPC] Transaction sent:", sentTx);
 
         if (sentTx.status !== "PENDING") {
+          console.log(
+            "❌ [SUBMIT RPC] Transaction not pending:",
+            sentTx.status,
+          );
           throw { status: sentTx.status, result: sentTx };
         }
 
@@ -49,21 +64,29 @@ export const useSubmitRpcTx = () => {
         let attempts = 0;
 
         while (attempts++ < MAX_ATTEMPTS && txResponse?.status !== "SUCCESS") {
+          console.log(
+            `⏳ [SUBMIT RPC] Polling attempt ${attempts}/${MAX_ATTEMPTS}`,
+          );
           txResponse = await rpcServer.getTransaction(sentTx.hash);
+          console.log(`📊 [SUBMIT RPC] Poll result:`, txResponse?.status);
 
           switch (txResponse.status) {
             case "FAILED":
+              console.log("❌ [SUBMIT RPC] Transaction failed:", txResponse);
               throw { status: "FAILED", result: txResponse };
             case "NOT_FOUND":
               await delay(1000);
               continue;
             case "SUCCESS":
+              console.log("✅ [SUBMIT RPC] Transaction succeeded!");
+              break;
             default:
             // Do nothing
           }
         }
 
         if (attempts >= MAX_ATTEMPTS || txResponse?.status !== "SUCCESS") {
+          console.log("⏰ [SUBMIT RPC] Transaction timed out");
           throw { status: "TIMEOUT", result: txResponse };
         }
 
@@ -74,13 +97,16 @@ export const useSubmitRpcTx = () => {
         // TS doesn't recognize operations property even though it is there
         const operations = submittedTx?.operations || [];
 
-        return {
+        const finalResult = {
           hash: sentTx.hash,
           result: txResponse,
           operationCount: operations.length,
           fee: submittedTx.fee,
         };
+        console.log("🎉 [SUBMIT RPC] Final success result:", finalResult);
+        return finalResult;
       } catch (e) {
+        console.log("💥 [SUBMIT RPC] Error caught:", e);
         throw {
           status: "ERROR",
           result: {

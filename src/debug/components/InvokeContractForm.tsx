@@ -138,7 +138,14 @@ export const InvokeContractForm = ({
   const responseErrorEl = useRef<HTMLDivElement | null>(null);
 
   const signTx = async (xdr: string): Promise<string | null> => {
+    console.log("🔐 [DEBUGGER] Starting signTx", {
+      xdr,
+      userPk,
+      hasSignTransaction: !!signTransaction,
+    });
+
     if (!signTransaction || !userPk) {
+      console.log("❌ [DEBUGGER] No sign function or user key");
       return null;
     }
 
@@ -146,15 +153,24 @@ export const InvokeContractForm = ({
 
     if (userPk) {
       try {
+        console.log("📞 [DEBUGGER] Calling signTransaction with:", {
+          address: userPk,
+          networkPassphrase: network.passphrase,
+        });
+
         const result = await signTransaction(xdr || "", {
           address: userPk,
           networkPassphrase: network.passphrase,
         });
 
+        console.log("🔏 [DEBUGGER] Sign result:", result);
+
         if (result.signedTxXdr && result.signedTxXdr !== "") {
+          console.log("✅ [DEBUGGER] Successfully signed transaction");
           return result.signedTxXdr;
         }
       } catch (error: unknown) {
+        console.log("❌ [DEBUGGER] Error signing transaction:", error);
         if (error instanceof Error && error.message) {
           setInvokeError({ message: error.message, methodType: "sign" });
         }
@@ -162,6 +178,7 @@ export const InvokeContractForm = ({
         setIsExtensionLoading(false);
       }
     }
+    console.log("❌ [DEBUGGER] Returning null from signTx");
     return null;
   };
 
@@ -259,25 +276,38 @@ export const InvokeContractForm = ({
   };
 
   const triggerSubmit = async () => {
+    console.log("🚀 [DEBUGGER] Starting triggerSubmit");
     setSubmissionQueued(false);
 
     if (!prepareTxData?.transactionXdr) {
+      console.log("❌ [DEBUGGER] No transaction data available");
       setInvokeError({
         message: "No transaction data available to sign",
         methodType: "submit",
       });
       return;
     }
+    console.log("📄 [DEBUGGER] Transaction XDR:", prepareTxData.transactionXdr);
     resetSimulateState();
     resetSubmitState();
 
     try {
+      console.log("✍️ [DEBUGGER] Signing transaction...");
       const signedTxXdr = await signTx(prepareTxData.transactionXdr);
+      console.log("✅ [DEBUGGER] Signed XDR:", signedTxXdr);
+
       if (!signedTxXdr) {
         throw new Error(
           "Transaction signing failed - no signed transaction received",
         );
       }
+
+      console.log("📤 [DEBUGGER] Submitting to RPC:", {
+        rpcUrl: network.rpcUrl,
+        networkPassphrase: network.passphrase,
+        headers: getNetworkHeaders(network, "rpc"),
+      });
+
       submitRpc({
         rpcUrl: network.rpcUrl,
         transactionXdr: signedTxXdr,
@@ -285,6 +315,7 @@ export const InvokeContractForm = ({
         headers: getNetworkHeaders(network, "rpc"),
       });
     } catch (error: unknown) {
+      console.log("❌ [DEBUGGER] Error in triggerSubmit:", error);
       setInvokeError({
         message: (error as Error)?.message || "Failed to sign transaction",
         methodType: "submit",

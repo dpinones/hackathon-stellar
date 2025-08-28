@@ -1,0 +1,50 @@
+# Requirements Document
+
+## Introduction
+
+This feature implements a simple decentralized application (DApp) interface for interacting with a Stellar smart contract that manages a counter. The DApp allows users to connect their Stellar wallet, view the current counter value by calling the `get_increment` function, and increment the counter by calling the `increment` function once connected. The interface is designed as a single screen to maintain simplicity, leveraging the existing Scaffold framework's debugger section for contract interactions without modifying it. The debugger remains the underlying layer for contract calls, ensuring the UI acts as a frontend wrapper around it.
+
+The purpose is to provide an intuitive, wallet-integrated UI for users to engage with the counter contract on Stellar testnet at address CAA2P2IWRA2P6PQS7PCEK2JUPZI6ERKFBZZM37HSMEOZNPZ2MKKJ7ZPI, focusing on seamless connection, display, and interaction. This addresses the need for a minimal viable DApp that demonstrates basic smart contract usage in a test environment. Technical constraints include reliance on Scaffold's built-in wallet connection and debugger for contract invocation, ensuring no changes to those components. The `get_increment` response is a JSON-RPC structure where the counter value is extracted from `results[0].returnValueJson.u32`. Edge cases such as wallet disconnection, failed transactions, and network issues are considered for robust UX. The UI must handle Spanish text as specified ("conectate" for connect, "incrementar" for increment) and change button styling upon connection.
+
+## Requirements
+
+### Requirement 1: Single Screen UI Display
+**User Story:** As a user, I want a single screen that displays the current counter value, so that I can monitor the state of the contract without navigating multiple pages.
+
+#### Acceptance Criteria
+1. WHEN the DApp loads THEN the system SHALL render a single screen containing the counter value fetched via `get_increment` from the debugger, targeting the contract at address CAA2P2IWRA2P6PQS7PCEK2JUPZI6ERKFBZZM37HSMEOZNPZ2MKKJ7ZPI on Stellar testnet.
+2. IF the counter value is successfully retrieved from the JSON-RPC response (specifically `results[0].returnValueJson.u32`) THEN the system SHALL display it prominently (e.g., in a large, centered text element).
+3. WHILE the screen is active THE system SHALL maintain the display of the counter value, refreshing it after each increment operation by re-parsing the `get_increment` response.
+4. IF the `get_increment` call fails (e.g., due to network error or invalid response structure) THEN the system SHALL display an error message (e.g., "Error loading counter") and allow retry via a refresh mechanism.
+
+### Requirement 2: Wallet Connection Button
+**User Story:** As a user, I want a button labeled "conectate" to connect to my Stellar wallet, so that I can authenticate and prepare for contract interactions.
+
+#### Acceptance Criteria
+1. WHEN the DApp loads THEN the system SHALL display a button with the text "conectate" in its default state (e.g., neutral color like gray).
+2. WHEN the user clicks the "conectate" button THEN the system SHALL initiate wallet connection using Scaffold's built-in wallet integration for Stellar testnet.
+3. IF wallet connection succeeds THEN the system SHALL update the button to show "incrementar", change its color (e.g., to green), and mark the user as connected (store connection state locally).
+4. IF wallet connection fails (e.g., user rejects or no wallet available) THEN the system SHALL display an error toast or message (e.g., "Connection failed") and revert the button to its default state.
+5. WHILE not connected THE system SHALL disable or gray out any increment functionality to prevent unauthorized calls.
+
+### Requirement 3: Increment Functionality
+**User Story:** As a connected user, I want the button to change to "incrementar" and trigger the `increment` function, so that I can update the counter value on the Stellar contract.
+
+#### Acceptance Criteria
+1. WHEN the user is connected and clicks the button THEN the system SHALL call the `increment` function via the debugger layer, targeting the contract at address CAA2P2IWRA2P6PQS7PCEK2JUPZI6ERKFBZZM37HSMEOZNPZ2MKKJ7ZPI on Stellar testnet.
+2. IF the `increment` call succeeds THEN the system SHALL refresh and display the updated counter value from `get_increment` (parsing `results[0].returnValueJson.u32`), and provide success feedback (e.g., a brief confirmation message).
+3. IF the `increment` call fails (e.g., transaction rejected, insufficient funds, or contract error) THEN the system SHALL display an error message (e.g., "Increment failed") without updating the counter, and keep the button in the connected state.
+4. WHILE connected THE system SHALL ensure the button remains styled as "incrementar" (e.g., green color) until disconnection.
+5. IF the user disconnects the wallet (via Scaffold's mechanism) THEN the system SHALL revert the button to "conectate" default state and clear the connection status.
+
+### Requirement 4: Connection State Management and UX Polish
+**User Story:** As a user, I want the UI to handle connection states seamlessly with visual feedback, so that I can understand the app's status and avoid confusion during interactions.
+
+#### Acceptance Criteria
+1. WHEN wallet connection status changes THEN the system SHALL update the button text, color, and enable/disable states accordingly (default: "conectate" gray; connected: "incrementar" green).
+2. IF the user refreshes the page THEN the system SHALL check for existing wallet connection and restore the appropriate button state if still valid, then fetch the counter value from `get_increment`.
+3. WHILE interacting THE system SHALL provide loading indicators (e.g., spinner) during connection or contract calls to indicate ongoing operations, including during JSON-RPC response parsing.
+4. IF edge cases occur (e.g., network disconnection mid-session or malformed JSON-RPC response) THEN the system SHALL detect changes via Scaffold's events and prompt reconnection or show status updates, with fallback to default counter display of 0 if parsing fails.
+5. THE system SHALL ensure the UI is responsive and accessible, with ARIA labels for the button (e.g., "Connect wallet" / "Increment counter") and high contrast for color changes.
+
+Do the requirements look good? If so, we can move on to the design.
