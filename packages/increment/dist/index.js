@@ -13,8 +13,16 @@ if (typeof window !== "undefined") {
 export const networks = {
   standalone: {
     networkPassphrase: "Standalone Network ; February 2017",
-    contractId: "CAO63URIW64YD4BXBNHFUWNI23FXP4HC46RROOG35RTKUCHCATVNEMN7",
+    contractId: "CADRDYOAZCYHF42BGXBMYZMSNG5JK2W3ME7LMINOXCD5OIDLTNHRLP43",
   },
+};
+export const Errors = {
+  1: { message: "NoPrice" },
+  2: { message: "LowBalance" },
+  3: { message: "Broke" },
+  4: { message: "NoGuesses" },
+  5: { message: "TimeNotPassed" },
+  6: { message: "WrongAnswer" },
 };
 export class Client extends ContractClient {
   options;
@@ -27,15 +35,23 @@ export class Client extends ContractClient {
   constructor(options) {
     super(
       new ContractSpec([
-        "AAAAAAAAAEBJbmNyZW1lbnQgaW5jcmVtZW50cyBhbiBpbnRlcm5hbCBjb3VudGVyLCBhbmQgcmV0dXJucyB0aGUgdmFsdWUuAAAACWluY3JlbWVudAAAAAAAAAAAAAABAAAABA==",
-        "AAAAAAAAAAAAAAANZ2V0X2luY3JlbWVudAAAAAAAAAAAAAABAAAABA==",
+        "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAABgAAAAAAAAAHTm9QcmljZQAAAAABAAAAAAAAAApMb3dCYWxhbmNlAAAAAAACAAAAAAAAAAVCcm9rZQAAAAAAAAMAAAAAAAAACU5vR3Vlc3NlcwAAAAAAAAQAAAAAAAAADVRpbWVOb3RQYXNzZWQAAAAAAAAFAAAAAAAAAAtXcm9uZ0Fuc3dlcgAAAAAG",
+        "AAAAAQAAAAAAAAAAAAAABUd1ZXNzAAAAAAAABAAAAAAAAAAGYW1vdW50AAAAAAALAAAAAAAAAAR0aW1lAAAABgAAAAAAAAAEdXNlcgAAABMAAAAAAAAACXdpbGxfcmlzZQAAAAAAAAE=",
+        "AAAAAAAAAAAAAAAKbWFrZV9ndWVzcwAAAAAAAwAAAAAAAAAEdXNlcgAAABMAAAAAAAAACXdpbGxfcmlzZQAAAAAAAAEAAAAAAAAABmFtb3VudAAAAAAACwAAAAEAAAPpAAAAAQAAAAM=",
+        "AAAAAAAAAAAAAAAMdmVyaWZ5X2d1ZXNzAAAAAQAAAAAAAAAEdXNlcgAAABMAAAABAAAD6QAAAAEAAAAD",
+        "AAAAAAAAAAAAAAAQZ2V0X3VzZXJfZ3Vlc3NlcwAAAAEAAAAAAAAABHVzZXIAAAATAAAAAQAAA+oAAAfQAAAABUd1ZXNzAAAA",
+        "AAAAAAAAAAAAAAAUZ2V0X3VzZXJfZ3Vlc3NfY291bnQAAAABAAAAAAAAAAR1c2VyAAAAEwAAAAEAAAAE",
+        "AAAAAAAAAAAAAAAFaGVsbG8AAAAAAAABAAAAAAAAAAJ0bwAAAAAAEAAAAAEAAAPqAAAAEA==",
       ]),
       options,
     );
     this.options = options;
   }
   fromJSON = {
-    increment: this.txFromJSON,
-    get_increment: this.txFromJSON,
+    make_guess: this.txFromJSON,
+    verify_guess: this.txFromJSON,
+    get_user_guesses: this.txFromJSON,
+    get_user_guess_count: this.txFromJSON,
+    hello: this.txFromJSON,
   };
 }

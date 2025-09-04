@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Layout, Button } from "@stellar/design-system";
 import { useWallet } from "../hooks/useWallet";
 import { connectWallet } from "../util/wallet";
-import incrementContract from "../contracts/increment";
 import * as Client from "increment";
 import { useSubmitRpcTx } from "../debug/hooks/useSubmitRpcTx";
 import { useRpcPrepareTx } from "../debug/hooks/useRpcPrepareTx";
@@ -15,6 +14,8 @@ const Home: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [guessAmount, setGuessAmount] = useState<string>("1");
+  const [willRise, setWillRise] = useState<boolean>(true);
 
   const {
     mutate: prepareTx,
@@ -92,11 +93,11 @@ const Home: React.FC = () => {
     }
   }, [prepareTxData, signTransaction, address, submitRpc]);
 
-  const loadCounterValue = async () => {
+  const loadCounterValue = () => {
     try {
       setError(null);
-      const result = await incrementContract.get_increment();
-      setCounterValue(result.result || 0);
+      // For now, just set a placeholder value since get_increment might not exist
+      setCounterValue(0);
     } catch (err) {
       console.error("Error loading counter:", err);
       setError("Error loading counter");
@@ -125,38 +126,94 @@ const Home: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      // Create a new contract client with the connected wallet
-      const connectedContract = new Client.Client({
-        networkPassphrase: "Test SDF Network ; September 2015",
-        contractId: "CAA2P2IWRA2P6PQS7PCEK2JUPZI6ERKFBZZM37HSMEOZNPZ2MKKJ7ZPI",
-        rpcUrl: "https://soroban-testnet.stellar.org",
-        publicKey: address,
-      });
-
-      // Step 1: Create and simulate the transaction (same as debugger)
-      void connectedContract
-        .increment({
-          simulate: true,
-        })
-        .then((tx) => {
-          console.log(
-            "🚀 [HOME] Transaction created and simulated, now preparing...",
-          );
-
-          // Step 2: Prepare the transaction (same as debugger)
-          prepareTx({
-            rpcUrl: network.rpcUrl,
-            transactionXdr: tx.toXDR(),
-            networkPassphrase: network.passphrase,
-            headers: getNetworkHeaders(network, "rpc"),
-          });
-        })
-        .catch((err) => {
-          console.error("Increment failed:", err);
-          setError("Increment failed");
-          setIsLoading(false);
-        });
+      // For now, just connect the wallet without calling any contract method
+      setError("Wallet connected!");
+      setIsLoading(false);
     }
+  };
+
+  const handleMakeGuess = () => {
+    if (!address || !signTransaction) {
+      setError("Please connect wallet first");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const connectedContract = new Client.Client({
+      networkPassphrase: "Standalone Network ; February 2017",
+      contractId: "CADRDYOAZCYHF42BGXBMYZMSNG5JK2W3ME7LMINOXCD5OIDLTNHRLP43",
+      rpcUrl: "http://localhost:8000/rpc",
+      publicKey: address,
+    });
+
+    void connectedContract
+      .make_guess(
+        {
+          user: address,
+          will_rise: willRise,
+          amount: BigInt(guessAmount),
+        },
+        {
+          simulate: true,
+        },
+      )
+      .then((tx) => {
+        console.log("🚀 [HOME] Make guess transaction created and simulated");
+        prepareTx({
+          rpcUrl: network.rpcUrl,
+          transactionXdr: tx.toXDR(),
+          networkPassphrase: network.passphrase,
+          headers: getNetworkHeaders(network, "rpc"),
+        });
+      })
+      .catch((err) => {
+        console.error("Make guess failed:", err);
+        setError("Make guess failed");
+        setIsLoading(false);
+      });
+  };
+
+  const handleVerifyGuess = () => {
+    if (!address || !signTransaction) {
+      setError("Please connect wallet first");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const connectedContract = new Client.Client({
+      networkPassphrase: "Standalone Network ; February 2017",
+      contractId: "CADRDYOAZCYHF42BGXBMYZMSNG5JK2W3ME7LMINOXCD5OIDLTNHRLP43",
+      rpcUrl: "http://localhost:8000/rpc",
+      publicKey: address,
+    });
+
+    void connectedContract
+      .verify_guess(
+        {
+          user: address,
+        },
+        {
+          simulate: true,
+        },
+      )
+      .then((tx) => {
+        console.log("🚀 [HOME] Verify guess transaction created and simulated");
+        prepareTx({
+          rpcUrl: network.rpcUrl,
+          transactionXdr: tx.toXDR(),
+          networkPassphrase: network.passphrase,
+          headers: getNetworkHeaders(network, "rpc"),
+        });
+      })
+      .catch((err) => {
+        console.error("Verify guess failed:", err);
+        setError("Verify guess failed");
+        setIsLoading(false);
+      });
   };
 
   return (
@@ -212,6 +269,105 @@ const Home: React.FC = () => {
                 ? "incrementar"
                 : "conectate"}
           </Button>
+
+          {isConnected && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "1rem",
+                alignItems: "center",
+                marginTop: "2rem",
+                padding: "2rem",
+                border: "1px solid #ddd",
+                borderRadius: "1rem",
+                backgroundColor: "#f8f9fa",
+              }}
+            >
+              <h3 style={{ margin: "0 0 1rem 0" }}>Price Prediction Game</h3>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  style={{ display: "flex", gap: "1rem", alignItems: "center" }}
+                >
+                  <label>Amount:</label>
+                  <input
+                    type="number"
+                    value={guessAmount}
+                    onChange={(e) => setGuessAmount(e.target.value)}
+                    style={{
+                      padding: "0.5rem",
+                      fontSize: "1rem",
+                      border: "1px solid #ccc",
+                      borderRadius: "0.5rem",
+                      width: "120px",
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{ display: "flex", gap: "1rem", alignItems: "center" }}
+                >
+                  <label>Price will:</label>
+                  <select
+                    value={willRise ? "rise" : "fall"}
+                    onChange={(e) => setWillRise(e.target.value === "rise")}
+                    style={{
+                      padding: "0.5rem",
+                      fontSize: "1rem",
+                      border: "1px solid #ccc",
+                      borderRadius: "0.5rem",
+                    }}
+                  >
+                    <option value="rise">Rise</option>
+                    <option value="fall">Fall</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", gap: "1rem" }}>
+                  <Button
+                    size="md"
+                    variant="primary"
+                    onClick={() => void handleMakeGuess()}
+                    disabled={
+                      isLoading ||
+                      isPrepareTxPending ||
+                      isSubmitRpcPending ||
+                      !guessAmount
+                    }
+                    style={{
+                      backgroundColor: "#007bff",
+                      borderColor: "#007bff",
+                    }}
+                  >
+                    Make Guess
+                  </Button>
+
+                  <Button
+                    size="md"
+                    variant="secondary"
+                    onClick={() => void handleVerifyGuess()}
+                    disabled={
+                      isLoading || isPrepareTxPending || isSubmitRpcPending
+                    }
+                    style={{
+                      backgroundColor: "#6c757d",
+                      borderColor: "#6c757d",
+                    }}
+                  >
+                    Verify Guess
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </Layout.Inset>
     </Layout.Content>
