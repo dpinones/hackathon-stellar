@@ -1,9 +1,9 @@
-import * as Client from "increment";
-import { rpcUrl } from "./util";
+import * as Client from 'increment';
+import { rpcUrl } from './util';
 
 export default new Client.Client({
-  networkPassphrase: "Test SDF Network ; September 2015",
-  contractId: "CDGTVQLR363AIFPDJ5ZALFJ7BB7ZN2ODYOBPMEK4UQJOEHI5DOOMTLW6",
+  networkPassphrase: 'Standalone Network ; February 2017',
+  contractId: 'CDZYNPNLCGWC77QL74MQIFMSWNF6KXZNW3UEONC45VGSPZZ5MNT55UR2',
   rpcUrl,
   publicKey: undefined,
 });

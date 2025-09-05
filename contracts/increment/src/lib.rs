@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, vec, Env, String, Vec, Symbol, Address, contracterror, token};
+use soroban_sdk::{contract, contractimpl, contracttype, vec, Env, String, Vec, Symbol, Address, contracterror, token, symbol_short};
 
 // Import the Reflector code
 mod reflector;
@@ -16,57 +16,80 @@ pub enum Error {
     NoPrice = 1,
     LowBalance = 2,
     Broke = 3,
-    NoGuesses = 4,
+    NoBattle = 4,
     TimeNotPassed = 5,
-    WrongAnswer = 6,
+    InvalidPair = 6,
+    BattleAlreadyExists = 7,
+    TooClose = 8,
 }
 
-// Data Structure for representing a guess
+// Enum for currency pairs
+#[contracttype]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CurrencyPair {
+    ArsChf,  // ARS vs CHF
+    BrlEur,  // BRL vs EUR  
+    MxnXau,  // MXN vs XAU (Gold)
+}
+
+// Data Structure for representing a battle bet
 #[contracttype]
 #[derive(Clone)]
-pub struct Guess {
+pub struct Battle {
     pub user: Address,
-    pub will_rise: bool,
+    pub pair: CurrencyPair,
+    pub chosen_currency: u32, // 0 for first currency, 1 for second currency
     pub amount: i128,
-    pub time: u64,
+    pub start_time: u64,
+    pub start_price_1: i128,
+    pub start_price_2: i128,
 }
 
 #[contractimpl]
 impl Contract {
-    pub fn make_guess(env: Env, user: Address, will_rise: bool, amount: i128) -> Result<bool, Error> {
+    // Get currency ticker symbols for a pair
+    fn get_currency_symbols(pair: CurrencyPair) -> (Symbol, Symbol) {
+        match pair {
+            CurrencyPair::ArsChf => (symbol_short!("ARS"), symbol_short!("CHF")),
+            CurrencyPair::BrlEur => (symbol_short!("BRL"), symbol_short!("EUR")),
+            CurrencyPair::MxnXau => (symbol_short!("MXN"), symbol_short!("XAU")),
+        }
+    }
+
+    // Fetch current price for a currency
+    fn fetch_price(env: &Env, ticker: Symbol) -> Result<i128, Error> {
+        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
+        let reflector_client = ReflectorClient::new(&env, &oracle_address);
+        
+        let asset = ReflectorAsset::Other(ticker);
+        let recent = reflector_client.lastprice(&asset);
+        
+        if recent.is_none() {
+            return Err(Error::NoPrice);
+        }
+        
+        Ok(recent.unwrap().price)
+    }
+
+    // Start a currency battle
+    pub fn start_battle(env: Env, user: Address, pair: CurrencyPair, chosen_currency: u32, amount: i128) -> Result<bool, Error> {
         user.require_auth();
 
         if amount <= 0 {
             return Err(Error::LowBalance);
         }
-        
 
-        // 1. Fetch Price
-        // Oracles on-chain are Smart Contracts, therefore we interface them via a contract address.
-        // Each Dataset has it's own smart contract address, in our case, for testnet it's the following address 
-        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
-        
-        // Create a Client to interface with
-        let reflector_client = ReflectorClient::new(&env, &oracle_address);
-        
-        // The game is EuroGuesser, so we will use the EUR ticker
-        // There's support for EUR, GBP, CAD, BRL
-        let ticker = ReflectorAsset::Other(Symbol::new(&env, &("EUR")));
-
-        // Fetch the latest price known to the oracle
-        // The data is refreshed every 5 minutes
-        let recent = reflector_client.lastprice(&ticker);
-        
-        // Verify if there are errors
-        // Errors can happen, and we must be dilligent
-        if recent.is_none() {
-            return Err(Error::NoPrice);
+        if chosen_currency > 1 {
+            return Err(Error::InvalidPair);
         }
-        
-        // We have a price, it's safe to unwrap
-        let price = recent.unwrap().price;
 
-        // 2. Check Users Balance
+        // Check if user already has an active battle for this pair
+        let battle_key = (user.clone(), pair);
+        if env.storage().instance().has(&battle_key) {
+            return Err(Error::BattleAlreadyExists);
+        }
+
+        // Check user balance
         let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
         let native_client = token::Client::new(&env, &native_asset_address);
         let balance = native_client.balance(&user);
@@ -75,110 +98,150 @@ impl Contract {
             return Err(Error::LowBalance);
         }
 
-        // 3. Create the guess
-        let guess = Guess {
+        // Get currency symbols for the pair
+        let (symbol1, symbol2) = Self::get_currency_symbols(pair);
+
+        // Fetch current prices for both currencies
+        let price1 = Self::fetch_price(&env, symbol1)?;
+        let price2 = Self::fetch_price(&env, symbol2)?;
+
+        // Create the battle
+        let battle = Battle {
             user: user.clone(),
-            will_rise,
+            pair,
+            chosen_currency,
             amount,
-            time: env.ledger().timestamp(),
+            start_time: env.ledger().timestamp(),
+            start_price_1: price1,
+            start_price_2: price2,
         };
 
-        // 4. Store user's guesses in a Vec
-        let mut user_guesses: Vec<Guess> = env.storage().instance().get(&user).unwrap_or(vec![&env]);
-        user_guesses.push_back(guess);
-        env.storage().instance().set(&user, &user_guesses);
+        // Store the battle
+        env.storage().instance().set(&battle_key, &battle);
 
-        // 5. Transfer tokens
+        // Transfer tokens to contract
         native_client.transfer(&user, &env.current_contract_address(), &amount);
 
         Ok(true)
     }
 
-    pub fn verify_guess(env: Env, user: Address) -> Result<bool, Error> {
+    // Settle a battle after 5 minutes
+    pub fn settle_battle(env: Env, user: Address, pair: CurrencyPair) -> Result<bool, Error> {
         user.require_auth();
 
-        // 1. Get entry
-        let mut user_guesses = env.storage().instance().get(&user).unwrap_or(vec![&env]);
-        if user_guesses.len() == 0 {
-            return Err(Error::NoGuesses);
-        }
+        // Get the battle
+        let battle_key = (user.clone(), pair);
+        let battle: Battle = env.storage().instance().get(&battle_key).ok_or(Error::NoBattle)?;
 
-        // Fetch the first guess from the queue for a particular user
-        let guess_data: Guess = user_guesses.get(0).ok_or(Error::NoGuesses)?;
-
-        // Remove from storage since we do not want to repeat a payment
-        user_guesses.remove(0);
-        if user_guesses.is_empty() {
-            // If it's totally empty, store nothing and worry about nothing
-            env.storage().instance().remove(&user);
-        } else {
-            // Leave the remaining entries for processing
-            env.storage().instance().set(&user, &user_guesses);
-        }
-
-        // 2. Verify if 5 minutes passed
-        // Since Reflector refreshes it's data every 5 minutes we ought to wait 5 minutes as well
-        if env.ledger().timestamp() < guess_data.time + 300 {
+        // Verify if 5 minutes passed
+        if env.ledger().timestamp() < battle.start_time + 300 {
             return Err(Error::TimeNotPassed);
         }
 
-        // 3. Check if price updated previously
-        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
-        
-        // Create a Client to interface with
-        let reflector_client = ReflectorClient::new(&env, &oracle_address);
-        
-        // The game is EuroGuesser, so we will use the EUR ticker
-        // There's support for EUR, GBP, CAD, BRL
-        let ticker = ReflectorAsset::Other(Symbol::new(&env, &("EUR")));
+        // Get currency symbols for the pair
+        let (symbol1, symbol2) = Self::get_currency_symbols(pair);
 
-        // Fetch the price 5 minutes after the time stored, prevents an attack where one could wait for the price to actually increase when voting
-        // Fetch the data from exactly the timestamp. Since we know the time, we do not have to story an entry and pay fees
-        let new_price = reflector_client.price(&ticker, &(&guess_data.time + 300));
-        let price_before = reflector_client.price(&ticker, &guess_data.time);
-        
-        // Verify if there are errors
-        // Errors can happen, and we must be dilligent
-        if new_price.is_none() || price_before.is_none() {
+        // Fetch historical prices at battle start time and end time
+        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
+        let reflector_client = ReflectorClient::new(&env, &oracle_address);
+
+        let asset1 = ReflectorAsset::Other(symbol1);
+        let asset2 = ReflectorAsset::Other(symbol2);
+
+        // Fetch end prices at exactly battle.start_time + 300
+        let end_time = battle.start_time + 300;
+        let end_price1 = reflector_client.price(&asset1, &end_time);
+        let end_price2 = reflector_client.price(&asset2, &end_time);
+
+        if end_price1.is_none() || end_price2.is_none() {
             return Err(Error::NoPrice);
         }
 
-        // We have a price, it's safe to unwrap
-        let price_orig = price_before.unwrap().price;
-        let price_new = new_price.unwrap().price;
+        let final_price1 = end_price1.unwrap().price;
+        let final_price2 = end_price2.unwrap().price;
 
-        // 4. Verify Guess
-        // The Guess is not correct so no winning
-        if price_orig > price_new && guess_data.will_rise != true {
+        // Calculate percentage changes
+        // % change = (new - old) / old * 10000 (using 10000 for precision since we can't use floats)
+        let change1 = ((final_price1 - battle.start_price_1) * 10000) / battle.start_price_1;
+        let change2 = ((final_price2 - battle.start_price_2) * 10000) / battle.start_price_2;
+
+        // Determine winner (higher percentage change wins)
+        let user_won = if battle.chosen_currency == 0 {
+            change1 > change2
+        } else {
+            change2 > change1
+        };
+
+        // Check for tie (difference less than 0.05% = 5 basis points)
+        let is_tie = if change1 > change2 { 
+            change1 - change2 < 5 
+        } else { 
+            change2 - change1 < 5 
+        };
+
+        // Remove the battle from storage
+        env.storage().instance().remove(&battle_key);
+
+        // Handle settlement
+        let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let native_client = token::Client::new(&env, &native_asset_address);
+        let contract_balance = native_client.balance(&env.current_contract_address());
+
+        if is_tie {
+            // Return original bet amount
+            if battle.amount > contract_balance {
+                return Err(Error::Broke);
+            }
+            native_client.transfer(&env.current_contract_address(), &user, &battle.amount);
             return Ok(false);
         }
 
-        // 5. Transfer Winnings
-        let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
-        let native_client = token::Client::new(&env, &native_asset_address);
-        let balance = native_client.balance(&env.current_contract_address());
-
-        // Execute only if no liquidity
-        if guess_data.amount * 2 > balance {
-            return Err(Error::Broke);
+        if user_won {
+            // Winner gets 1.8x their stake
+            let winnings = (battle.amount * 18) / 10;
+            if winnings > contract_balance {
+                return Err(Error::Broke);
+            }
+            native_client.transfer(&env.current_contract_address(), &user, &winnings);
+            Ok(true)
+        } else {
+            // User loses their bet (already transferred to contract)
+            Ok(false)
         }
-
-
-        native_client.transfer(&env.current_contract_address(), &user, &(guess_data.amount * 2));
-
-        Ok(true)
-
     }
 
-    // Get all guesses for a specific user
-    pub fn get_user_guesses(env: Env, user: Address) -> Vec<Guess> {
-        env.storage().instance().get(&user).unwrap_or(vec![&env])
+    // Get active battle for a user and currency pair
+    pub fn get_user_battle(env: Env, user: Address, pair: CurrencyPair) -> Option<Battle> {
+        let battle_key = (user, pair);
+        env.storage().instance().get(&battle_key)
     }
 
-    // Get total number of guesses for a user
-    pub fn get_user_guess_count(env: Env, user: Address) -> u32 {
-        let user_guesses: Vec<Guess> = env.storage().instance().get(&user).unwrap_or(vec![&env]);
-        user_guesses.len()
+    // Get current prices for a currency pair
+    pub fn get_pair_prices(env: Env, pair: CurrencyPair) -> Result<(i128, i128), Error> {
+        let (symbol1, symbol2) = Self::get_currency_symbols(pair);
+        let price1 = Self::fetch_price(&env, symbol1)?;
+        let price2 = Self::fetch_price(&env, symbol2)?;
+        Ok((price1, price2))
+    }
+
+    // Check if battle time has elapsed (5 minutes)
+    pub fn is_battle_ready(env: Env, user: Address, pair: CurrencyPair) -> bool {
+        let battle_key = (user, pair);
+        if let Some(battle) = env.storage().instance().get::<(Address, CurrencyPair), Battle>(&battle_key) {
+            env.ledger().timestamp() >= battle.start_time + 300
+        } else {
+            false
+        }
+    }
+
+    // Get available currency pairs
+    pub fn get_available_pairs(_env: Env) -> Vec<CurrencyPair> {
+        vec![
+            &_env,
+            CurrencyPair::ArsChf,
+            CurrencyPair::BrlEur,
+            CurrencyPair::MxnXau,
+        ]
     }
 
     pub fn hello(env: Env, to: String) -> Vec<String> {
