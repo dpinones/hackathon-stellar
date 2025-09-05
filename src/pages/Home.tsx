@@ -142,10 +142,11 @@ const Home: React.FC = () => {
     setError(null);
 
     const connectedContract = new Client.Client({
-      networkPassphrase: "Standalone Network ; February 2017",
-      contractId: "CADRDYOAZCYHF42BGXBMYZMSNG5JK2W3ME7LMINOXCD5OIDLTNHRLP43",
-      rpcUrl: "http://localhost:8000/rpc",
+      networkPassphrase: network.passphrase,
+      contractId: "CDGTVQLR363AIFPDJ5ZALFJ7BB7ZN2ODYOBPMEK4UQJOEHI5DOOMTLW6",
+      rpcUrl: network.rpcUrl,
       publicKey: address,
+      allowHttp: true,
     });
 
     void connectedContract
@@ -185,10 +186,11 @@ const Home: React.FC = () => {
     setError(null);
 
     const connectedContract = new Client.Client({
-      networkPassphrase: "Standalone Network ; February 2017",
-      contractId: "CADRDYOAZCYHF42BGXBMYZMSNG5JK2W3ME7LMINOXCD5OIDLTNHRLP43",
-      rpcUrl: "http://localhost:8000/rpc",
+      networkPassphrase: network.passphrase,
+      contractId: "CDGTVQLR363AIFPDJ5ZALFJ7BB7ZN2ODYOBPMEK4UQJOEHI5DOOMTLW6",
+      rpcUrl: network.rpcUrl,
       publicKey: address,
+      allowHttp: true,
     });
 
     void connectedContract
