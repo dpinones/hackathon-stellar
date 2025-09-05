@@ -45,7 +45,7 @@ const FundAccountButton: React.FC = () => {
       onMouseEnter={() => setIsTooltipVisible(true)}
       onMouseLeave={() => setIsTooltipVisible(false)}
     >
-      <Tooltip
+      {/* <Tooltip
         isVisible={isTooltipVisible}
         isContrast
         title="Fund Account"
@@ -66,7 +66,7 @@ const FundAccountButton: React.FC = () => {
             ? "Account is already funded"
             : "Fund your account using the Stellar Friendbot"}
         </div>
-      </Tooltip>
+      </Tooltip> */}
     </div>
   );
 };

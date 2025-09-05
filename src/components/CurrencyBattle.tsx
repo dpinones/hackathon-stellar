@@ -143,7 +143,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CDGTVQLR363AIFPDJ5ZALFJ7BB7ZN2ODYOBPMEK4UQJOEHI5DOOMTLW6",
+        contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -189,7 +189,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CDGTVQLR363AIFPDJ5ZALFJ7BB7ZN2ODYOBPMEK4UQJOEHI5DOOMTLW6",
+        contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -199,8 +199,12 @@ export const CurrencyBattle: React.FC = () => {
       
       for (const pair of Object.values(CurrencyPair)) {
         try {
-          const prices = await connectedContract.get_pair_prices({ pair: pair });
-          newPrices[pair] = [Number(prices[0]), Number(prices[1])];
+          const contractPair = { tag: pair, values: undefined };
+          const assembledTx = await connectedContract.get_pair_prices({ pair: contractPair });
+          const prices = assembledTx.result;
+          if (prices.isOk()) {
+            newPrices[pair] = [Number(prices.unwrap()[0]), Number(prices.unwrap()[1])];
+          }
         } catch (err) {
           console.error(`Error loading prices for ${pair}:`, err);
         }
@@ -242,7 +246,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CDGTVQLR363AIFPDJ5ZALFJ7BB7ZN2ODYOBPMEK4UQJOEHI5DOOMTLW6",
+      contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -252,7 +256,7 @@ export const CurrencyBattle: React.FC = () => {
       .start_battle(
         {
           user: address,
-          pair: selectedPair,
+          pair: { tag: selectedPair, values: undefined },
           chosen_currency: chosenCurrency,
           amount: BigInt(betAmount),
         },
@@ -286,7 +290,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CDGTVQLR363AIFPDJ5ZALFJ7BB7ZN2ODYOBPMEK4UQJOEHI5DOOMTLW6",
+      contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -296,7 +300,7 @@ export const CurrencyBattle: React.FC = () => {
       .settle_battle(
         {
           user: address,
-          pair: currentBattle.pair,
+          pair: { tag: currentBattle.pair, values: undefined },
         },
         {
           simulate: true,

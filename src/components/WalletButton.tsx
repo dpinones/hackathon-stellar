@@ -28,9 +28,9 @@ export const WalletButton = () => {
         opacity: balance.isLoading ? 0.6 : 1,
       }}
     >
-      <Text as="div" size="sm">
+      {/* <Text as="div" size="sm">
         Wallet Balance: {xlm} XLM
-      </Text>
+      </Text> */}
 
       <div id="modalContainer">
         <Modal

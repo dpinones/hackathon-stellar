@@ -19,7 +19,7 @@ const AppLayout: React.FC = () => (
                 textDecoration: "none",
               }}
             >
-              {({ isActive }) => (
+              {/* {({ isActive }) => (
                 <Button
                   variant="tertiary"
                   size="md"
@@ -29,7 +29,7 @@ const AppLayout: React.FC = () => (
                   <Icon.Code02 size="md" />
                   Debugger
                 </Button>
-              )}
+              )} */}
             </NavLink>
           </nav>
           <ConnectAccount />
@@ -37,7 +37,7 @@ const AppLayout: React.FC = () => (
       }
     />
     <Outlet />
-    <Layout.Footer>
+    {/* <Layout.Footer>
       <span>
         © {new Date().getFullYear()} Currency Clash Arena. Licensed under the{" "}
         <a
@@ -49,7 +49,7 @@ const AppLayout: React.FC = () => (
         </a>
         .
       </span>
-    </Layout.Footer>
+    </Layout.Footer> */}
   </main>
 );
 
