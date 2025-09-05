@@ -143,7 +143,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
+        contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -189,7 +189,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
+        contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -246,7 +246,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
+      contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -290,7 +290,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CBAUFX4VFYDXP2V4ZHFFW5H2PYUHPGSWJ4ABXTVY54B533DIYYZDHP34",
+      contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,

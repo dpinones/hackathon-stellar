@@ -71,6 +71,28 @@ impl Contract {
         Ok(recent.unwrap().price)
     }
 
+    // Last five prices
+    fn fetch_last_five_prices(env: &Env, ticker: Symbol) -> Result<Vec<i128>, Error> {
+        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
+        let reflector_client = ReflectorClient::new(&env, &oracle_address);
+        
+        let asset = ReflectorAsset::Other(ticker);
+        let recents = reflector_client.prices(&asset, &5);
+        
+        if recents.is_none() {
+            return Err(Error::NoPrice);
+        }
+
+        let recent_prices = recents.unwrap();
+        let mut prices = Vec::new(&env);
+        
+        for price_data in recent_prices.iter() {
+            prices.push_back(price_data.price);
+        }
+        
+        Ok(prices)
+    }
+
     // Start a currency battle
     pub fn start_battle(env: Env, user: Address, pair: CurrencyPair, chosen_currency: u32, amount: i128) -> Result<bool, Error> {
         user.require_auth();
