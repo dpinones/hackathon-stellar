@@ -34,7 +34,7 @@ if (typeof window !== 'undefined') {
 export const networks = {
   standalone: {
     networkPassphrase: "Standalone Network ; February 2017",
-    contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
+    contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
   }
 } as const
 
@@ -63,6 +63,26 @@ export interface Battle {
 }
 
 export interface Client {
+  /**
+   * Construct and simulate a fetch_last_five_prices transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  fetch_last_five_prices: ({ticker}: {ticker: string}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<Result<Array<i128>>>>
+
   /**
    * Construct and simulate a start_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
@@ -224,6 +244,7 @@ export class Client extends ContractClient {
       new ContractSpec([ "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAACAAAAAAAAAAHTm9QcmljZQAAAAABAAAAAAAAAApMb3dCYWxhbmNlAAAAAAACAAAAAAAAAAVCcm9rZQAAAAAAAAMAAAAAAAAACE5vQmF0dGxlAAAABAAAAAAAAAANVGltZU5vdFBhc3NlZAAAAAAAAAUAAAAAAAAAC0ludmFsaWRQYWlyAAAAAAYAAAAAAAAAE0JhdHRsZUFscmVhZHlFeGlzdHMAAAAABwAAAAAAAAAIVG9vQ2xvc2UAAAAI",
         "AAAAAgAAAAAAAAAAAAAADEN1cnJlbmN5UGFpcgAAAAMAAAAAAAAAAAAAAAZBcnNDaGYAAAAAAAAAAAAAAAAABkJybEV1cgAAAAAAAAAAAAAAAAAGTXhuWGF1AAA=",
         "AAAAAQAAAAAAAAAAAAAABkJhdHRsZQAAAAAABwAAAAAAAAAGYW1vdW50AAAAAAALAAAAAAAAAA9jaG9zZW5fY3VycmVuY3kAAAAABAAAAAAAAAAEcGFpcgAAB9AAAAAMQ3VycmVuY3lQYWlyAAAAAAAAAA1zdGFydF9wcmljZV8xAAAAAAAACwAAAAAAAAANc3RhcnRfcHJpY2VfMgAAAAAAAAsAAAAAAAAACnN0YXJ0X3RpbWUAAAAAAAYAAAAAAAAABHVzZXIAAAAT",
+        "AAAAAAAAAAAAAAAWZmV0Y2hfbGFzdF9maXZlX3ByaWNlcwAAAAAAAQAAAAAAAAAGdGlja2VyAAAAAAARAAAAAQAAA+kAAAPqAAAACwAAAAM=",
         "AAAAAAAAAAAAAAAMc3RhcnRfYmF0dGxlAAAABAAAAAAAAAAEdXNlcgAAABMAAAAAAAAABHBhaXIAAAfQAAAADEN1cnJlbmN5UGFpcgAAAAAAAAAPY2hvc2VuX2N1cnJlbmN5AAAAAAQAAAAAAAAABmFtb3VudAAAAAAACwAAAAEAAAPpAAAAAQAAAAM=",
         "AAAAAAAAAAAAAAANc2V0dGxlX2JhdHRsZQAAAAAAAAIAAAAAAAAABHVzZXIAAAATAAAAAAAAAARwYWlyAAAH0AAAAAxDdXJyZW5jeVBhaXIAAAABAAAD6QAAAAEAAAAD",
         "AAAAAAAAAAAAAAAPZ2V0X3VzZXJfYmF0dGxlAAAAAAIAAAAAAAAABHVzZXIAAAATAAAAAAAAAARwYWlyAAAH0AAAAAxDdXJyZW5jeVBhaXIAAAABAAAD6AAAB9AAAAAGQmF0dGxlAAA=",
@@ -235,7 +256,8 @@ export class Client extends ContractClient {
     )
   }
   public readonly fromJSON = {
-    start_battle: this.txFromJSON<Result<boolean>>,
+    fetch_last_five_prices: this.txFromJSON<Result<Array<i128>>>,
+        start_battle: this.txFromJSON<Result<boolean>>,
         settle_battle: this.txFromJSON<Result<boolean>>,
         get_user_battle: this.txFromJSON<Option<Battle>>,
         get_pair_prices: this.txFromJSON<Result<readonly [i128, i128]>>,

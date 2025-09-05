@@ -72,7 +72,7 @@ impl Contract {
     }
 
     // Last five prices
-    fn fetch_last_five_prices(env: &Env, ticker: Symbol) -> Result<Vec<i128>, Error> {
+    pub fn fetch_last_five_prices(env: &Env, ticker: Symbol) -> Result<Vec<i128>, Error> {
         let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
         let reflector_client = ReflectorClient::new(&env, &oracle_address);
         

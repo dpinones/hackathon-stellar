@@ -57,6 +57,7 @@ export const CurrencyBattle: React.FC = () => {
   const [betAmount, setBetAmount] = useState<string>("10");
   const [chosenCurrency, setChosenCurrency] = useState<number>(0);
   const [currentPrices, setCurrentPrices] = useState<{[key in CurrencyPair]?: [number, number]}>({});
+  const [priceHistory, setPriceHistory] = useState<{[key in CurrencyPair]?: number[]}>({});
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showVictory, setShowVictory] = useState(false);
@@ -134,6 +135,7 @@ export const CurrencyBattle: React.FC = () => {
     if (address) {
       loadBattleState();
       loadCurrentPrices();
+      loadPriceHistory();
     }
   }, [address]);
 
@@ -143,7 +145,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
+        contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -189,7 +191,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
+        contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -246,7 +248,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
+      contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -290,7 +292,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CDAASIVM6SAJDUVZRT54NM7377WDAT2VMJKW47T7OCAMPS7Q5GC2G5D6",
+      contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -361,6 +363,42 @@ export const CurrencyBattle: React.FC = () => {
 
   const formatPrice = (price: number) => {
     return `$${(price / 100000000000000).toFixed(6)}`;
+  };
+
+  const loadPriceHistory = async () => {
+    if (!address) return;
+    
+    try {
+      const connectedContract = new Client.Client({
+        networkPassphrase: network.passphrase,
+        contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
+        rpcUrl: network.rpcUrl,
+        publicKey: address,
+        allowHttp: true,
+      });
+
+      const newHistory: {[key in CurrencyPair]?: number[]} = {};
+      
+      for (const pair of Object.values(CurrencyPair)) {
+        try {
+          // Get ticker symbol for the first currency in the pair
+          const ticker = pair === CurrencyPair.ArsChf ? "ARS" : 
+                        pair === CurrencyPair.BrlEur ? "BRL" : "MXN";
+          
+          const assembledTx = await connectedContract.fetch_last_five_prices({ ticker });
+          const prices = assembledTx.result;
+          if (prices.isOk()) {
+            newHistory[pair] = prices.unwrap().map(p => Number(p));
+          }
+        } catch (err) {
+          console.error(`Error loading price history for ${pair}:`, err);
+        }
+      }
+      
+      setPriceHistory(newHistory);
+    } catch (err) {
+      console.error("Error loading price history:", err);
+    }
   };
 
   if (!address) {
@@ -453,6 +491,96 @@ export const CurrencyBattle: React.FC = () => {
           <div style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>
             Your bet: {currentBattle.amount} tokens
           </div>
+
+          {/* Price History Table */}
+          {priceHistory[currentBattle.pair] && (
+            <div style={{
+              backgroundColor: "white",
+              borderRadius: "0.5rem",
+              padding: "1rem",
+              marginBottom: "1rem",
+              border: "1px solid #ddd"
+            }}>
+              <h4 style={{ margin: "0 0 1rem 0", color: currencyPairData[currentBattle.pair].color }}>
+                📈 Historial de Precios (Últimos 5 precios)
+              </h4>
+              <table style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "0.9rem"
+              }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#f8f9fa" }}>
+                    <th style={{ 
+                      padding: "0.5rem", 
+                      border: "1px solid #dee2e6", 
+                      textAlign: "center",
+                      fontWeight: "bold",
+                      color: currencyPairData[currentBattle.pair].color
+                    }}>
+                      Orden
+                    </th>
+                    <th style={{ 
+                      padding: "0.5rem", 
+                      border: "1px solid #dee2e6", 
+                      textAlign: "center",
+                      fontWeight: "bold",
+                      color: currencyPairData[currentBattle.pair].color
+                    }}>
+                      {currencyPairData[currentBattle.pair].currency1.symbol} Precio
+                    </th>
+                    <th style={{ 
+                      padding: "0.5rem", 
+                      border: "1px solid #dee2e6", 
+                      textAlign: "center",
+                      fontWeight: "bold",
+                      color: currencyPairData[currentBattle.pair].color
+                    }}>
+                      Tendencia
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceHistory[currentBattle.pair]!.map((price, index) => {
+                    const prevPrice = index > 0 ? priceHistory[currentBattle.pair]![index - 1] : price;
+                    const isUp = price > prevPrice;
+                    const isDown = price < prevPrice;
+                    
+                    return (
+                      <tr key={index} style={{ 
+                        backgroundColor: index % 2 === 0 ? "#f8f9fa" : "white" 
+                      }}>
+                        <td style={{ 
+                          padding: "0.5rem", 
+                          border: "1px solid #dee2e6", 
+                          textAlign: "center",
+                          fontWeight: "bold"
+                        }}>
+                          #{index + 1}
+                        </td>
+                        <td style={{ 
+                          padding: "0.5rem", 
+                          border: "1px solid #dee2e6", 
+                          textAlign: "center",
+                          fontFamily: "monospace"
+                        }}>
+                          {formatPrice(price)}
+                        </td>
+                        <td style={{ 
+                          padding: "0.5rem", 
+                          border: "1px solid #dee2e6", 
+                          textAlign: "center",
+                          fontSize: "1.2rem"
+                        }}>
+                          {isUp ? "📈" : isDown ? "📉" : "➡️"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
           
           {currentBattle.isActive && currentBattle.timeRemaining && currentBattle.timeRemaining > 0 ? (
             <BattleProgress
@@ -468,6 +596,37 @@ export const CurrencyBattle: React.FC = () => {
               <div style={{ fontSize: "2rem", marginBottom: "1rem", color: "green" }}>
                 ⏰ Battle Complete!
               </div>
+              
+              {/* Show battle results with current prices to determine winner */}
+              {currentPrices[currentBattle.pair] && (
+                <div style={{
+                  backgroundColor: "white",
+                  borderRadius: "0.5rem",
+                  padding: "1rem",
+                  marginBottom: "1rem",
+                  border: "1px solid #ddd"
+                }}>
+                  <h4 style={{ margin: "0 0 0.5rem 0", color: currencyPairData[currentBattle.pair].color }}>
+                    🏆 Battle Results
+                  </h4>
+                  <div style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+                    <div>Current {currencyPairData[currentBattle.pair].currency1.symbol} price: {formatPrice(currentPrices[currentBattle.pair]![0])}</div>
+                    <div>Current {currencyPairData[currentBattle.pair].currency2.symbol} price: {formatPrice(currentPrices[currentBattle.pair]![1])}</div>
+                  </div>
+                  <div style={{ 
+                    fontSize: "1.1rem", 
+                    fontWeight: "bold",
+                    color: currencyPairData[currentBattle.pair].color,
+                    marginTop: "0.5rem"
+                  }}>
+                    Your choice: {currentBattle.chosenCurrency === 0 
+                      ? `${currencyPairData[currentBattle.pair].currency1.flag} ${currencyPairData[currentBattle.pair].currency1.symbol}`
+                      : `${currencyPairData[currentBattle.pair].currency2.flag} ${currencyPairData[currentBattle.pair].currency2.symbol}`
+                    }
+                  </div>
+                </div>
+              )}
+              
               <Button
                 size="lg"
                 variant="primary"
@@ -662,6 +821,136 @@ export const CurrencyBattle: React.FC = () => {
                 />
                 <span style={{ fontSize: "1.1rem", color: "#666" }}>tokens</span>
               </div>
+
+              {/* Price History Table for Selected Pair */}
+              {priceHistory[selectedPair] && currentPrices[selectedPair] && (
+                <div style={{
+                  backgroundColor: "#f8f9fa",
+                  borderRadius: "0.5rem",
+                  padding: "1.5rem",
+                  marginBottom: "2rem",
+                  border: "1px solid #ddd"
+                }}>
+                  <h4 style={{ margin: "0 0 1rem 0", color: currencyPairData[selectedPair].color, textAlign: "center" }}>
+                    📊 Historial de Precios y Competencia
+                  </h4>
+                  <table style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: "0.9rem",
+                    backgroundColor: "white",
+                    borderRadius: "0.5rem",
+                    overflow: "hidden",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                  }}>
+                    <thead>
+                      <tr style={{ backgroundColor: currencyPairData[selectedPair].color, color: "white" }}>
+                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
+                          Período
+                        </th>
+                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
+                          {currencyPairData[selectedPair].currency1.flag} {currencyPairData[selectedPair].currency1.symbol}
+                        </th>
+                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
+                          {currencyPairData[selectedPair].currency2.flag} {currencyPairData[selectedPair].currency2.symbol}
+                        </th>
+                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
+                          Ganador
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {priceHistory[selectedPair]!.map((price1, index) => {
+                        // For demo purposes, generate price2 based on current price ratio
+                        // In real implementation, you would get actual historical data for currency2
+                        const currentRatio = currentPrices[selectedPair]![1] / currentPrices[selectedPair]![0];
+                        const price2 = price1 * currentRatio;
+                        
+                        const prevPrice1 = index > 0 ? priceHistory[selectedPair]![index - 1] : price1;
+                        const prevPrice2 = prevPrice1 * currentRatio;
+                        
+                        const change1 = price1 - prevPrice1;
+                        const change2 = price2 - prevPrice2;
+                        const percentChange1 = prevPrice1 !== 0 ? (change1 / prevPrice1) * 100 : 0;
+                        const percentChange2 = prevPrice2 !== 0 ? (change2 / prevPrice2) * 100 : 0;
+                        
+                        const winner = Math.abs(percentChange1) > Math.abs(percentChange2) ? 
+                          currencyPairData[selectedPair].currency1 : 
+                          currencyPairData[selectedPair].currency2;
+                        
+                        return (
+                          <tr key={index} style={{ 
+                            backgroundColor: index % 2 === 0 ? "#f8f9fa" : "white",
+                            borderBottom: "1px solid #dee2e6"
+                          }}>
+                            <td style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
+                              #{index + 1}
+                            </td>
+                            <td style={{ padding: "0.75rem", textAlign: "center" }}>
+                              <div style={{ fontFamily: "monospace", fontWeight: "bold" }}>
+                                {formatPrice(price1)}
+                              </div>
+                              <div style={{ 
+                                fontSize: "0.8rem", 
+                                color: change1 > 0 ? "green" : change1 < 0 ? "red" : "#666",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "0.25rem"
+                              }}>
+                                {change1 > 0 ? "📈" : change1 < 0 ? "📉" : "➡️"}
+                                {percentChange1.toFixed(2)}%
+                              </div>
+                            </td>
+                            <td style={{ padding: "0.75rem", textAlign: "center" }}>
+                              <div style={{ fontFamily: "monospace", fontWeight: "bold" }}>
+                                {formatPrice(price2)}
+                              </div>
+                              <div style={{ 
+                                fontSize: "0.8rem", 
+                                color: change2 > 0 ? "green" : change2 < 0 ? "red" : "#666",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "0.25rem"
+                              }}>
+                                {change2 > 0 ? "📈" : change2 < 0 ? "📉" : "➡️"}
+                                {percentChange2.toFixed(2)}%
+                              </div>
+                            </td>
+                            <td style={{ padding: "0.75rem", textAlign: "center" }}>
+                              <div style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "0.5rem",
+                                padding: "0.25rem 0.5rem",
+                                borderRadius: "1rem",
+                                backgroundColor: currencyPairData[selectedPair].color + "20",
+                                color: currencyPairData[selectedPair].color,
+                                fontWeight: "bold",
+                                fontSize: "0.9rem"
+                              }}>
+                                <span style={{ fontSize: "1.2rem" }}>🏆</span>
+                                {winner.flag} {winner.symbol}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div style={{ 
+                    fontSize: "0.8rem", 
+                    color: "#666", 
+                    textAlign: "center", 
+                    marginTop: "1rem",
+                    fontStyle: "italic"
+                  }}>
+                    El ganador se determina por el mayor cambio porcentual absoluto en cada período
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
                 <Button
