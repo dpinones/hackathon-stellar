@@ -7,7 +7,7 @@ export * as rpc from '@stellar/stellar-sdk/rpc';
 export declare const networks: {
     readonly standalone: {
         readonly networkPassphrase: "Standalone Network ; February 2017";
-        readonly contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D";
+        readonly contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC";
     };
 };
 export declare const Errors: {
@@ -46,14 +46,18 @@ export type CurrencyPair = {
     tag: "MxnXau";
     values: void;
 };
-export interface Battle {
+export interface Participant {
     amount: i128;
     chosen_currency: u32;
+    user: string;
+}
+export interface Battle {
+    is_settled: boolean;
     pair: CurrencyPair;
+    participants: Array<Participant>;
     start_price_1: i128;
     start_price_2: i128;
     start_time: u64;
-    user: string;
 }
 export interface Client {
     /**
@@ -118,10 +122,9 @@ export interface Client {
         simulate?: boolean;
     }) => Promise<AssembledTransaction<Result<boolean>>>;
     /**
-     * Construct and simulate a get_user_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     * Construct and simulate a get_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
-    get_user_battle: ({ user, pair }: {
-        user: string;
+    get_battle: ({ pair }: {
         pair: CurrencyPair;
     }, options?: {
         /**
@@ -137,6 +140,26 @@ export interface Client {
          */
         simulate?: boolean;
     }) => Promise<AssembledTransaction<Option<Battle>>>;
+    /**
+     * Construct and simulate a is_user_in_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    is_user_in_battle: ({ user, pair }: {
+        user: string;
+        pair: CurrencyPair;
+    }, options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<boolean>>;
     /**
      * Construct and simulate a get_pair_prices transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
@@ -159,8 +182,7 @@ export interface Client {
     /**
      * Construct and simulate a is_battle_ready transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
-    is_battle_ready: ({ user, pair }: {
-        user: string;
+    is_battle_ready: ({ pair }: {
         pair: CurrencyPair;
     }, options?: {
         /**
@@ -230,7 +252,8 @@ export declare class Client extends ContractClient {
         fetch_last_five_prices: (json: string) => AssembledTransaction<Result<bigint[], import("@stellar/stellar-sdk/contract").ErrorMessage>>;
         start_battle: (json: string) => AssembledTransaction<Result<boolean, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
         settle_battle: (json: string) => AssembledTransaction<Result<boolean, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
-        get_user_battle: (json: string) => AssembledTransaction<Option<Battle>>;
+        get_battle: (json: string) => AssembledTransaction<Option<Battle>>;
+        is_user_in_battle: (json: string) => AssembledTransaction<boolean>;
         get_pair_prices: (json: string) => AssembledTransaction<Result<readonly [bigint, bigint], import("@stellar/stellar-sdk/contract").ErrorMessage>>;
         is_battle_ready: (json: string) => AssembledTransaction<boolean>;
         get_available_pairs: (json: string) => AssembledTransaction<CurrencyPair[]>;

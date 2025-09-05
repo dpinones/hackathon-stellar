@@ -32,17 +32,25 @@ pub enum CurrencyPair {
     MxnXau,  // MXN vs XAU (Gold)
 }
 
-// Data Structure for representing a battle bet
+// Data Structure for representing a participant in a battle
+#[contracttype]
+#[derive(Clone)]
+pub struct Participant {
+    pub user: Address,
+    pub chosen_currency: u32, // 0 for first currency, 1 for second currency
+    pub amount: i128,
+}
+
+// Data Structure for representing a battle
 #[contracttype]
 #[derive(Clone)]
 pub struct Battle {
-    pub user: Address,
     pub pair: CurrencyPair,
-    pub chosen_currency: u32, // 0 for first currency, 1 for second currency
-    pub amount: i128,
+    pub participants: Vec<Participant>,
     pub start_time: u64,
     pub start_price_1: i128,
     pub start_price_2: i128,
+    pub is_settled: bool,
 }
 
 #[contractimpl]
@@ -93,7 +101,7 @@ impl Contract {
         Ok(prices)
     }
 
-    // Start a currency battle
+    // Start or join a currency battle
     pub fn start_battle(env: Env, user: Address, pair: CurrencyPair, chosen_currency: u32, amount: i128) -> Result<bool, Error> {
         user.require_auth();
 
@@ -105,12 +113,6 @@ impl Contract {
             return Err(Error::InvalidPair);
         }
 
-        // Check if user already has an active battle for this pair
-        let battle_key = (user.clone(), pair);
-        if env.storage().instance().has(&battle_key) {
-            return Err(Error::BattleAlreadyExists);
-        }
-
         // Check user balance
         let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
         let native_client = token::Client::new(&env, &native_asset_address);
@@ -120,25 +122,48 @@ impl Contract {
             return Err(Error::LowBalance);
         }
 
-        // Get currency symbols for the pair
-        let (symbol1, symbol2) = Self::get_currency_symbols(pair);
-
-        // Fetch current prices for both currencies
-        let price1 = Self::fetch_price(&env, symbol1)?;
-        let price2 = Self::fetch_price(&env, symbol2)?;
-
-        // Create the battle
-        let battle = Battle {
-            user: user.clone(),
-            pair,
-            chosen_currency,
-            amount,
-            start_time: env.ledger().timestamp(),
-            start_price_1: price1,
-            start_price_2: price2,
+        let battle_key = pair;
+        
+        // Check if battle already exists for this pair
+        let mut battle = if let Some(existing_battle) = env.storage().instance().get::<CurrencyPair, Battle>(&battle_key) {
+            // Check if battle is already settled
+            if existing_battle.is_settled {
+                return Err(Error::BattleAlreadyExists);
+            }
+            
+            // Check if user is already participating
+            for participant in existing_battle.participants.iter() {
+                if participant.user == user {
+                    return Err(Error::BattleAlreadyExists);
+                }
+            }
+            
+            existing_battle
+        } else {
+            // Create new battle - first person starts it
+            let (symbol1, symbol2) = Self::get_currency_symbols(pair);
+            let price1 = Self::fetch_price(&env, symbol1)?;
+            let price2 = Self::fetch_price(&env, symbol2)?;
+            
+            Battle {
+                pair,
+                participants: Vec::new(&env),
+                start_time: env.ledger().timestamp(),
+                start_price_1: price1,
+                start_price_2: price2,
+                is_settled: false,
+            }
         };
 
-        // Store the battle
+        // Add participant to battle
+        let participant = Participant {
+            user: user.clone(),
+            chosen_currency,
+            amount,
+        };
+        battle.participants.push_back(participant);
+
+        // Store the updated battle
         env.storage().instance().set(&battle_key, &battle);
 
         // Transfer tokens to contract
@@ -147,13 +172,18 @@ impl Contract {
         Ok(true)
     }
 
-    // Settle a battle after 5 minutes
+    // Settle a battle after 5 minutes - anyone can call this
     pub fn settle_battle(env: Env, user: Address, pair: CurrencyPair) -> Result<bool, Error> {
         user.require_auth();
 
         // Get the battle
-        let battle_key = (user.clone(), pair);
-        let battle: Battle = env.storage().instance().get(&battle_key).ok_or(Error::NoBattle)?;
+        let battle_key = pair;
+        let mut battle: Battle = env.storage().instance().get(&battle_key).ok_or(Error::NoBattle)?;
+
+        // Check if already settled
+        if battle.is_settled {
+            return Err(Error::BattleAlreadyExists);
+        }
 
         // Verify if 5 minutes passed
         if env.ledger().timestamp() < battle.start_time + 300 {
@@ -187,12 +217,8 @@ impl Contract {
         let change1 = ((final_price1 - battle.start_price_1) * 10000) / battle.start_price_1;
         let change2 = ((final_price2 - battle.start_price_2) * 10000) / battle.start_price_2;
 
-        // Determine winner (higher percentage change wins)
-        let user_won = if battle.chosen_currency == 0 {
-            change1 > change2
-        } else {
-            change2 > change1
-        };
+        // Determine winning currency (higher percentage change wins)
+        let winning_currency = if change1 > change2 { 0 } else { 1 };
 
         // Check for tie (difference less than 0.05% = 5 basis points)
         let is_tie = if change1 > change2 { 
@@ -201,41 +227,63 @@ impl Contract {
             change2 - change1 < 5 
         };
 
-        // Remove the battle from storage
-        env.storage().instance().remove(&battle_key);
+        // Mark battle as settled
+        battle.is_settled = true;
+        env.storage().instance().set(&battle_key, &battle);
 
-        // Handle settlement
+        // Handle settlement - distribute winnings
         let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
         let native_client = token::Client::new(&env, &native_asset_address);
-        let contract_balance = native_client.balance(&env.current_contract_address());
 
         if is_tie {
-            // Return original bet amount
-            if battle.amount > contract_balance {
-                return Err(Error::Broke);
+            // Return original bet amounts to all participants
+            for participant in battle.participants.iter() {
+                native_client.transfer(&env.current_contract_address(), &participant.user, &participant.amount);
             }
-            native_client.transfer(&env.current_contract_address(), &user, &battle.amount);
             return Ok(false);
         }
 
-        if user_won {
-            // Winner gets 1.8x their stake
-            let winnings = (battle.amount * 18) / 10;
-            if winnings > contract_balance {
-                return Err(Error::Broke);
+        // Calculate total pool and winning pool
+        let mut total_pool: i128 = 0;
+        let mut winning_pool: i128 = 0;
+        
+        for participant in battle.participants.iter() {
+            total_pool += participant.amount;
+            if participant.chosen_currency == winning_currency {
+                winning_pool += participant.amount;
             }
-            native_client.transfer(&env.current_contract_address(), &user, &winnings);
-            Ok(true)
-        } else {
-            // User loses their bet (already transferred to contract)
-            Ok(false)
         }
+
+        // Distribute winnings proportionally to winners
+        for participant in battle.participants.iter() {
+            if participant.chosen_currency == winning_currency {
+                // Winner gets their proportion of the total pool
+                let winnings = (participant.amount * total_pool) / winning_pool;
+                native_client.transfer(&env.current_contract_address(), &participant.user, &winnings);
+            }
+            // Losers get nothing (their funds stay in contract or are distributed to winners)
+        }
+
+        Ok(true)
     }
 
-    // Get active battle for a user and currency pair
-    pub fn get_user_battle(env: Env, user: Address, pair: CurrencyPair) -> Option<Battle> {
-        let battle_key = (user, pair);
+    // Get active battle for a currency pair
+    pub fn get_battle(env: Env, pair: CurrencyPair) -> Option<Battle> {
+        let battle_key = pair;
         env.storage().instance().get(&battle_key)
+    }
+
+    // Check if user is participating in a battle for this pair
+    pub fn is_user_in_battle(env: Env, user: Address, pair: CurrencyPair) -> bool {
+        let battle_key = pair;
+        if let Some(battle) = env.storage().instance().get::<CurrencyPair, Battle>(&battle_key) {
+            for participant in battle.participants.iter() {
+                if participant.user == user {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     // Get current prices for a currency pair
@@ -247,10 +295,10 @@ impl Contract {
     }
 
     // Check if battle time has elapsed (5 minutes)
-    pub fn is_battle_ready(env: Env, user: Address, pair: CurrencyPair) -> bool {
-        let battle_key = (user, pair);
-        if let Some(battle) = env.storage().instance().get::<(Address, CurrencyPair), Battle>(&battle_key) {
-            env.ledger().timestamp() >= battle.start_time + 300
+    pub fn is_battle_ready(env: Env, pair: CurrencyPair) -> bool {
+        let battle_key = pair;
+        if let Some(battle) = env.storage().instance().get::<CurrencyPair, Battle>(&battle_key) {
+            !battle.is_settled && env.ledger().timestamp() >= battle.start_time + 300
         } else {
             false
         }

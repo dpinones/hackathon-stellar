@@ -145,7 +145,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
+        contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -191,7 +191,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
+        contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,
@@ -248,7 +248,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
+      contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -292,7 +292,7 @@ export const CurrencyBattle: React.FC = () => {
 
     const connectedContract = new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
+      contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -371,7 +371,7 @@ export const CurrencyBattle: React.FC = () => {
     try {
       const connectedContract = new Client.Client({
         networkPassphrase: network.passphrase,
-        contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
+        contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
         rpcUrl: network.rpcUrl,
         publicKey: address,
         allowHttp: true,

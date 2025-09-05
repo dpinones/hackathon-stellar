@@ -34,7 +34,7 @@ if (typeof window !== 'undefined') {
 export const networks = {
   standalone: {
     networkPassphrase: "Standalone Network ; February 2017",
-    contractId: "CBURMY6GFXUNAGOVFC4RBJSEXALNI7QBHRZZZ6XGYSGYERNX5ONS4O4D",
+    contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
   }
 } as const
 
@@ -52,14 +52,20 @@ export const Errors = {
 export type CurrencyPair = {tag: "ArsChf", values: void} | {tag: "BrlEur", values: void} | {tag: "MxnXau", values: void};
 
 
-export interface Battle {
+export interface Participant {
   amount: i128;
   chosen_currency: u32;
+  user: string;
+}
+
+
+export interface Battle {
+  is_settled: boolean;
   pair: CurrencyPair;
+  participants: Array<Participant>;
   start_price_1: i128;
   start_price_2: i128;
   start_time: u64;
-  user: string;
 }
 
 export interface Client {
@@ -124,9 +130,9 @@ export interface Client {
   }) => Promise<AssembledTransaction<Result<boolean>>>
 
   /**
-   * Construct and simulate a get_user_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Construct and simulate a get_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_user_battle: ({user, pair}: {user: string, pair: CurrencyPair}, options?: {
+  get_battle: ({pair}: {pair: CurrencyPair}, options?: {
     /**
      * The fee to pay for the transaction. Default: BASE_FEE
      */
@@ -142,6 +148,26 @@ export interface Client {
      */
     simulate?: boolean;
   }) => Promise<AssembledTransaction<Option<Battle>>>
+
+  /**
+   * Construct and simulate a is_user_in_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   */
+  is_user_in_battle: ({user, pair}: {user: string, pair: CurrencyPair}, options?: {
+    /**
+     * The fee to pay for the transaction. Default: BASE_FEE
+     */
+    fee?: number;
+
+    /**
+     * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+     */
+    timeoutInSeconds?: number;
+
+    /**
+     * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+     */
+    simulate?: boolean;
+  }) => Promise<AssembledTransaction<boolean>>
 
   /**
    * Construct and simulate a get_pair_prices transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -166,7 +192,7 @@ export interface Client {
   /**
    * Construct and simulate a is_battle_ready transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  is_battle_ready: ({user, pair}: {user: string, pair: CurrencyPair}, options?: {
+  is_battle_ready: ({pair}: {pair: CurrencyPair}, options?: {
     /**
      * The fee to pay for the transaction. Default: BASE_FEE
      */
@@ -243,13 +269,15 @@ export class Client extends ContractClient {
     super(
       new ContractSpec([ "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAACAAAAAAAAAAHTm9QcmljZQAAAAABAAAAAAAAAApMb3dCYWxhbmNlAAAAAAACAAAAAAAAAAVCcm9rZQAAAAAAAAMAAAAAAAAACE5vQmF0dGxlAAAABAAAAAAAAAANVGltZU5vdFBhc3NlZAAAAAAAAAUAAAAAAAAAC0ludmFsaWRQYWlyAAAAAAYAAAAAAAAAE0JhdHRsZUFscmVhZHlFeGlzdHMAAAAABwAAAAAAAAAIVG9vQ2xvc2UAAAAI",
         "AAAAAgAAAAAAAAAAAAAADEN1cnJlbmN5UGFpcgAAAAMAAAAAAAAAAAAAAAZBcnNDaGYAAAAAAAAAAAAAAAAABkJybEV1cgAAAAAAAAAAAAAAAAAGTXhuWGF1AAA=",
-        "AAAAAQAAAAAAAAAAAAAABkJhdHRsZQAAAAAABwAAAAAAAAAGYW1vdW50AAAAAAALAAAAAAAAAA9jaG9zZW5fY3VycmVuY3kAAAAABAAAAAAAAAAEcGFpcgAAB9AAAAAMQ3VycmVuY3lQYWlyAAAAAAAAAA1zdGFydF9wcmljZV8xAAAAAAAACwAAAAAAAAANc3RhcnRfcHJpY2VfMgAAAAAAAAsAAAAAAAAACnN0YXJ0X3RpbWUAAAAAAAYAAAAAAAAABHVzZXIAAAAT",
+        "AAAAAQAAAAAAAAAAAAAAC1BhcnRpY2lwYW50AAAAAAMAAAAAAAAABmFtb3VudAAAAAAACwAAAAAAAAAPY2hvc2VuX2N1cnJlbmN5AAAAAAQAAAAAAAAABHVzZXIAAAAT",
+        "AAAAAQAAAAAAAAAAAAAABkJhdHRsZQAAAAAABgAAAAAAAAAKaXNfc2V0dGxlZAAAAAAAAQAAAAAAAAAEcGFpcgAAB9AAAAAMQ3VycmVuY3lQYWlyAAAAAAAAAAxwYXJ0aWNpcGFudHMAAAPqAAAH0AAAAAtQYXJ0aWNpcGFudAAAAAAAAAAADXN0YXJ0X3ByaWNlXzEAAAAAAAALAAAAAAAAAA1zdGFydF9wcmljZV8yAAAAAAAACwAAAAAAAAAKc3RhcnRfdGltZQAAAAAABg==",
         "AAAAAAAAAAAAAAAWZmV0Y2hfbGFzdF9maXZlX3ByaWNlcwAAAAAAAQAAAAAAAAAGdGlja2VyAAAAAAARAAAAAQAAA+kAAAPqAAAACwAAAAM=",
         "AAAAAAAAAAAAAAAMc3RhcnRfYmF0dGxlAAAABAAAAAAAAAAEdXNlcgAAABMAAAAAAAAABHBhaXIAAAfQAAAADEN1cnJlbmN5UGFpcgAAAAAAAAAPY2hvc2VuX2N1cnJlbmN5AAAAAAQAAAAAAAAABmFtb3VudAAAAAAACwAAAAEAAAPpAAAAAQAAAAM=",
         "AAAAAAAAAAAAAAANc2V0dGxlX2JhdHRsZQAAAAAAAAIAAAAAAAAABHVzZXIAAAATAAAAAAAAAARwYWlyAAAH0AAAAAxDdXJyZW5jeVBhaXIAAAABAAAD6QAAAAEAAAAD",
-        "AAAAAAAAAAAAAAAPZ2V0X3VzZXJfYmF0dGxlAAAAAAIAAAAAAAAABHVzZXIAAAATAAAAAAAAAARwYWlyAAAH0AAAAAxDdXJyZW5jeVBhaXIAAAABAAAD6AAAB9AAAAAGQmF0dGxlAAA=",
+        "AAAAAAAAAAAAAAAKZ2V0X2JhdHRsZQAAAAAAAQAAAAAAAAAEcGFpcgAAB9AAAAAMQ3VycmVuY3lQYWlyAAAAAQAAA+gAAAfQAAAABkJhdHRsZQAA",
+        "AAAAAAAAAAAAAAARaXNfdXNlcl9pbl9iYXR0bGUAAAAAAAACAAAAAAAAAAR1c2VyAAAAEwAAAAAAAAAEcGFpcgAAB9AAAAAMQ3VycmVuY3lQYWlyAAAAAQAAAAE=",
         "AAAAAAAAAAAAAAAPZ2V0X3BhaXJfcHJpY2VzAAAAAAEAAAAAAAAABHBhaXIAAAfQAAAADEN1cnJlbmN5UGFpcgAAAAEAAAPpAAAD7QAAAAIAAAALAAAACwAAAAM=",
-        "AAAAAAAAAAAAAAAPaXNfYmF0dGxlX3JlYWR5AAAAAAIAAAAAAAAABHVzZXIAAAATAAAAAAAAAARwYWlyAAAH0AAAAAxDdXJyZW5jeVBhaXIAAAABAAAAAQ==",
+        "AAAAAAAAAAAAAAAPaXNfYmF0dGxlX3JlYWR5AAAAAAEAAAAAAAAABHBhaXIAAAfQAAAADEN1cnJlbmN5UGFpcgAAAAEAAAAB",
         "AAAAAAAAAAAAAAATZ2V0X2F2YWlsYWJsZV9wYWlycwAAAAAAAAAAAQAAA+oAAAfQAAAADEN1cnJlbmN5UGFpcg==",
         "AAAAAAAAAAAAAAAFaGVsbG8AAAAAAAABAAAAAAAAAAJ0bwAAAAAAEAAAAAEAAAPqAAAAEA==" ]),
       options
@@ -259,7 +287,8 @@ export class Client extends ContractClient {
     fetch_last_five_prices: this.txFromJSON<Result<Array<i128>>>,
         start_battle: this.txFromJSON<Result<boolean>>,
         settle_battle: this.txFromJSON<Result<boolean>>,
-        get_user_battle: this.txFromJSON<Option<Battle>>,
+        get_battle: this.txFromJSON<Option<Battle>>,
+        is_user_in_battle: this.txFromJSON<boolean>,
         get_pair_prices: this.txFromJSON<Result<readonly [i128, i128]>>,
         is_battle_ready: this.txFromJSON<boolean>,
         get_available_pairs: this.txFromJSON<Array<CurrencyPair>>,
