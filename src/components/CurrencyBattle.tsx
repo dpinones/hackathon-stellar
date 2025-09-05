@@ -54,7 +54,7 @@ export const CurrencyBattle: React.FC = () => {
   const { address, signTransaction } = useWallet();
   const [selectedPair, setSelectedPair] = useState<CurrencyPair | null>(null);
   const [currentBattle, setCurrentBattle] = useState<BattleState | null>(null);
-  const [betAmount, setBetAmount] = useState<string>("0");
+  const [betAmount, setBetAmount] = useState<string>("");
   const [chosenCurrency, setChosenCurrency] = useState<number>(0);
   const [currentPrices, setCurrentPrices] = useState<{[key in CurrencyPair]?: [number, number]}>({});
   const [priceHistory, setPriceHistory] = useState<{[key in CurrencyPair]?: number[]}>({});
@@ -864,6 +864,7 @@ export const CurrencyBattle: React.FC = () => {
                       value={betAmount}
                       onChange={(e) => setBetAmount(e.target.value)}
                       min="0"
+                      autoFocus
                       style={{
                         fontSize: "2rem",
                         fontWeight: "bold",
