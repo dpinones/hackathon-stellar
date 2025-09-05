@@ -54,7 +54,7 @@ export const CurrencyBattle: React.FC = () => {
   const { address, signTransaction } = useWallet();
   const [selectedPair, setSelectedPair] = useState<CurrencyPair | null>(null);
   const [currentBattle, setCurrentBattle] = useState<BattleState | null>(null);
-  const [betAmount, setBetAmount] = useState<string>("10");
+  const [betAmount, setBetAmount] = useState<string>("0");
   const [chosenCurrency, setChosenCurrency] = useState<number>(0);
   const [currentPrices, setCurrentPrices] = useState<{[key in CurrencyPair]?: [number, number]}>({});
   const [priceHistory, setPriceHistory] = useState<{[key in CurrencyPair]?: number[]}>({});
@@ -412,6 +412,18 @@ export const CurrencyBattle: React.FC = () => {
 
   return (
     <div style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
+      <style>
+        {`
+          input[type="number"]::-webkit-outer-spin-button,
+          input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          input[type="number"] {
+            -moz-appearance: textfield;
+          }
+        `}
+      </style>
       <div style={{ textAlign: "center", marginBottom: "2rem" }}>
         <h1 style={{ fontSize: "2.5rem", margin: "0 0 0.5rem 0" }}>
           🏟️ Currency Clash Arena
@@ -450,9 +462,9 @@ export const CurrencyBattle: React.FC = () => {
             ⚔️ Battle in Progress!
           </h2>
           
-          <div style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>
+          {/* <div style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>
             {currencyPairData[currentBattle.pair].name}
-          </div>
+          </div> */}
           
           <div
             style={{
@@ -652,8 +664,8 @@ export const CurrencyBattle: React.FC = () => {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
-                gap: "2rem",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: "1.5rem",
                 marginBottom: "2rem",
               }}
             >
@@ -663,8 +675,8 @@ export const CurrencyBattle: React.FC = () => {
                   onClick={() => setSelectedPair(pair as CurrencyPair)}
                   style={{
                     border: "2px solid " + data.color,
-                    borderRadius: "1rem",
-                    padding: "2rem",
+                    borderRadius: "0.75rem",
+                    padding: "1.5rem",
                     cursor: "pointer",
                     textAlign: "center",
                     backgroundColor: "white",
@@ -680,10 +692,10 @@ export const CurrencyBattle: React.FC = () => {
                     e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
                   }}
                 >
-                  <h3 style={{ margin: "0 0 1rem 0", color: data.color }}>
+                  <h3 style={{ margin: "0 0 0.75rem 0", color: data.color, fontSize: "1.3rem" }}>
                     {data.name}
                   </h3>
-                  <p style={{ margin: "0 0 1.5rem 0", color: "#666" }}>
+                  <p style={{ margin: "0 0 1rem 0", color: "#666", fontSize: "0.9rem" }}>
                     {data.description}
                   </p>
                   
@@ -692,21 +704,21 @@ export const CurrencyBattle: React.FC = () => {
                       display: "flex",
                       justifyContent: "center",
                       alignItems: "center",
-                      gap: "1rem",
-                      marginBottom: "1rem",
+                      gap: "0.75rem",
+                      marginBottom: "0.75rem",
                     }}
                   >
-                    <div style={{ fontSize: "2rem" }}>
+                    <div style={{ fontSize: "1.6rem" }}>
                       {data.currency1.flag} {data.currency1.symbol}
                     </div>
-                    <div style={{ fontSize: "1.5rem", color: data.color }}>VS</div>
-                    <div style={{ fontSize: "2rem" }}>
+                    <div style={{ fontSize: "1.2rem", color: data.color }}>VS</div>
+                    <div style={{ fontSize: "1.6rem" }}>
                       {data.currency2.flag} {data.currency2.symbol}
                     </div>
                   </div>
                   
                   {currentPrices[pair as CurrencyPair] && (
-                    <div style={{ fontSize: "0.9rem", color: "#666" }}>
+                    <div style={{ fontSize: "0.8rem", color: "#666" }}>
                       Current prices: {formatPrice(currentPrices[pair as CurrencyPair]![0])} | {formatPrice(currentPrices[pair as CurrencyPair]![1])}
                     </div>
                   )}
@@ -714,122 +726,246 @@ export const CurrencyBattle: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div
-              style={{
-                border: "2px solid " + currencyPairData[selectedPair].color,
-                borderRadius: "1rem",
-                padding: "2rem",
-                backgroundColor: "white",
-                maxWidth: "600px",
-                margin: "0 auto",
-              }}
-            >
-              <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-                <h2 style={{ margin: "0 0 1rem 0", color: currencyPairData[selectedPair].color }}>
-                  {currencyPairData[selectedPair].name}
-                </h2>
-                <p style={{ margin: 0, color: "#666" }}>
-                  {currencyPairData[selectedPair].description}
-                </p>
-              </div>
-
+            <div style={{ display: "flex", gap: "2rem", alignItems: "flex-start" }}>
+              {/* Left Column - Battle Setup */}
               <div
                 style={{
-                  display: "flex",
-                  gap: "1rem",
-                  marginBottom: "2rem",
-                  justifyContent: "center",
+                  border: "2px solid " + currencyPairData[selectedPair].color,
+                  borderRadius: "1rem",
+                  padding: "2rem",
+                  backgroundColor: "white",
+                  flex: "1",
+                  minWidth: "500px",
+                  position: "relative",
                 }}
               >
-                <div
-                  onClick={() => setChosenCurrency(0)}
+                {/* Back Button - Top Left Corner */}
+                {/* <button
+                  onClick={() => setSelectedPair(null)}
+                  disabled={isLoading || isPrepareTxPending || isSubmitRpcPending}
                   style={{
-                    padding: "1.5rem",
-                    borderRadius: "1rem",
-                    border: "2px solid",
-                    borderColor: chosenCurrency === 0 ? currencyPairData[selectedPair].color : "#ddd",
-                    backgroundColor: chosenCurrency === 0 ? currencyPairData[selectedPair].color : "white",
-                    color: chosenCurrency === 0 ? "white" : "black",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    flex: 1,
-                  }}
-                >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
-                    {currencyPairData[selectedPair].currency1.flag}
-                  </div>
-                  <div style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-                    {currencyPairData[selectedPair].currency1.symbol}
-                  </div>
-                  <div style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
-                    {currencyPairData[selectedPair].currency1.name}
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setChosenCurrency(1)}
-                  style={{
-                    padding: "1.5rem",
-                    borderRadius: "1rem",
-                    border: "2px solid",
-                    borderColor: chosenCurrency === 1 ? currencyPairData[selectedPair].color : "#ddd",
-                    backgroundColor: chosenCurrency === 1 ? currencyPairData[selectedPair].color : "white",
-                    color: chosenCurrency === 1 ? "white" : "black",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    flex: 1,
-                  }}
-                >
-                  <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
-                    {currencyPairData[selectedPair].currency2.flag}
-                  </div>
-                  <div style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-                    {currencyPairData[selectedPair].currency2.symbol}
-                  </div>
-                  <div style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
-                    {currencyPairData[selectedPair].currency2.name}
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "1rem",
-                  marginBottom: "2rem",
-                  justifyContent: "center",
-                }}
-              >
-                <label style={{ fontSize: "1.1rem", fontWeight: "bold" }}>
-                  Bet Amount:
-                </label>
-                <input
-                  type="number"
-                  value={betAmount}
-                  onChange={(e) => setBetAmount(e.target.value)}
-                  min="1"
-                  max="1000"
-                  style={{
-                    padding: "0.8rem",
-                    fontSize: "1.1rem",
-                    border: "2px solid #ddd",
+                    position: "absolute",
+                    top: "1rem",
+                    left: "1rem",
+                    padding: "0.5rem 1rem",
                     borderRadius: "0.5rem",
-                    width: "150px",
-                    textAlign: "center",
+                    border: "1px solid #6c757d",
+                    fontSize: "0.85rem",
+                    fontWeight: "normal",
+                    cursor: "pointer",
+                    backgroundColor: "white",
+                    color: "#6c757d",
+                    transition: "all 0.2s",
+                    zIndex: 1
                   }}
-                />
-                <span style={{ fontSize: "1.1rem", color: "#666" }}>tokens</span>
+                  onMouseOver={(e) => {
+                    if (!e.currentTarget.disabled) {
+                      e.currentTarget.style.backgroundColor = "#f8f9fa";
+                      e.currentTarget.style.borderColor = "#495057";
+                      e.currentTarget.style.color = "#495057";
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!e.currentTarget.disabled) {
+                      e.currentTarget.style.backgroundColor = "white";
+                      e.currentTarget.style.borderColor = "#6c757d";
+                      e.currentTarget.style.color = "#6c757d";
+                    }
+                  }}
+                >
+                  ← Back
+                </button> */}
+
+                <div style={{ textAlign: "center", marginBottom: "2rem", marginTop: "1rem" }}>
+                  {/* <h2 style={{ margin: "0 0 1rem 0", color: currencyPairData[selectedPair].color }}>
+                    {currencyPairData[selectedPair].name}
+                  </h2> */}
+                  {/* <p style={{ margin: 0, color: "#666" }}>
+                    {currencyPairData[selectedPair].description}
+                  </p> */}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "1rem",
+                    marginBottom: "2rem",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div
+                    onClick={() => setChosenCurrency(0)}
+                    style={{
+                      padding: "1.5rem",
+                      borderRadius: "1rem",
+                      border: "2px solid",
+                      borderColor: chosenCurrency === 0 ? currencyPairData[selectedPair].color : "#ddd",
+                      backgroundColor: chosenCurrency === 0 ? currencyPairData[selectedPair].color : "white",
+                      color: chosenCurrency === 0 ? "white" : "black",
+                      cursor: "pointer",
+                      textAlign: "center",
+                      flex: 1,
+                    }}
+                  >
+                    <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
+                      {currencyPairData[selectedPair].currency1.flag}
+                    </div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
+                      {currencyPairData[selectedPair].currency1.symbol}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
+                      {currencyPairData[selectedPair].currency1.name}
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setChosenCurrency(1)}
+                    style={{
+                      padding: "1.5rem",
+                      borderRadius: "1rem",
+                      border: "2px solid",
+                      borderColor: chosenCurrency === 1 ? currencyPairData[selectedPair].color : "#ddd",
+                      backgroundColor: chosenCurrency === 1 ? currencyPairData[selectedPair].color : "white",
+                      color: chosenCurrency === 1 ? "white" : "black",
+                      cursor: "pointer",
+                      textAlign: "center",
+                      flex: 1,
+                    }}
+                  >
+                    <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
+                      {currencyPairData[selectedPair].currency2.flag}
+                    </div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
+                      {currencyPairData[selectedPair].currency2.symbol}
+                    </div>
+                    <div style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
+                      {currencyPairData[selectedPair].currency2.name}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amount Section */}
+                <div style={{ marginBottom: "2rem" }}>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "1rem"
+                  }}>
+                    <h4 style={{ 
+                      margin: 0, 
+                      fontSize: "1.2rem", 
+                      color: "#333" 
+                    }}>
+                      Amount
+                    </h4>
+                    <input
+                      type="number"
+                      value={betAmount}
+                      onChange={(e) => setBetAmount(e.target.value)}
+                      min="0"
+                      style={{
+                        fontSize: "2rem",
+                        fontWeight: "bold",
+                        color: "#333",
+                        backgroundColor: "transparent",
+                        border: "none",
+                        outline: "none",
+                        textAlign: "right",
+                        width: "auto",
+                        maxWidth: "200px",
+                        MozAppearance: "textfield",
+                        WebkitAppearance: "none",
+                        appearance: "none"
+                      }}
+                      placeholder="0"
+                    />
+                  </div>
+                  
+                  {/* Preset Amount Buttons */}
+                  <div style={{ 
+                    display: "flex", 
+                    gap: "0.5rem", 
+                    justifyContent: "center" 
+                  }}>
+                    {[1, 20, 100].map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => {
+                          const currentAmount = Number(betAmount) || 0;
+                          setBetAmount((currentAmount + amount).toString());
+                        }}
+                        style={{
+                          padding: "0.75rem 1.5rem",
+                          borderRadius: "0.5rem",
+                          border: "none",
+                          fontSize: "1rem",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          backgroundColor: "#495057",
+                          color: "white",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = "#6c757d";
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = "#495057";
+                        }}
+                      >
+                        +${amount}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Trade Button */}
+                <button
+                  onClick={handleStartBattle}
+                  disabled={
+                    isLoading ||
+                    isPrepareTxPending ||
+                    isSubmitRpcPending ||
+                    !betAmount ||
+                    Number(betAmount) <= 0 ||
+                    (chosenCurrency !== 0 && chosenCurrency !== 1)
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "1rem 2rem",
+                    borderRadius: "0.75rem",
+                    border: "none",
+                    fontSize: "1.3rem",
+                    fontWeight: "bold",
+                    cursor: isLoading || isPrepareTxPending || isSubmitRpcPending || 
+                           !betAmount || Number(betAmount) <= 0 || 
+                           (chosenCurrency !== 0 && chosenCurrency !== 1) ? "not-allowed" : "pointer",
+                    backgroundColor: isLoading || isPrepareTxPending || isSubmitRpcPending || 
+                                   !betAmount || Number(betAmount) <= 0 || 
+                                   (chosenCurrency !== 0 && chosenCurrency !== 1) ? "#6c757d" : "#007bff",
+                    color: "white",
+                    transition: "all 0.2s",
+                    opacity: isLoading || isPrepareTxPending || isSubmitRpcPending || 
+                             !betAmount || Number(betAmount) <= 0 || 
+                             (chosenCurrency !== 0 && chosenCurrency !== 1) ? 0.6 : 1
+                  }}
+                >
+                  {isLoading || isPrepareTxPending || isSubmitRpcPending
+                    ? "Starting Battle..."
+                    : "Trade"}
+                </button>
               </div>
 
-              {/* Price History Table for Selected Pair */}
+              {/* Right Column - Price History Table */}
               {priceHistory[selectedPair] && currentPrices[selectedPair] && (
                 <div style={{
                   backgroundColor: "#f8f9fa",
                   borderRadius: "0.5rem",
                   padding: "1.5rem",
-                  marginBottom: "2rem",
-                  border: "1px solid #ddd"
+                  border: "1px solid #ddd",
+                  flex: "1",
+                  minWidth: "500px",
+                  maxWidth: "600px"
                 }}>
                   <h4 style={{ margin: "0 0 1rem 0", color: currencyPairData[selectedPair].color, textAlign: "center" }}>
                     📊 Historial de Precios y Competencia
@@ -951,40 +1087,6 @@ export const CurrencyBattle: React.FC = () => {
                   </div>
                 </div>
               )}
-
-              <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
-                <Button
-                  size="md"
-                  variant="secondary"
-                  onClick={() => setSelectedPair(null)}
-                  disabled={isLoading || isPrepareTxPending || isSubmitRpcPending}
-                >
-                  ← Back to Pairs
-                </Button>
-
-                <Button
-                  size="lg"
-                  variant="primary"
-                  onClick={handleStartBattle}
-                  disabled={
-                    isLoading ||
-                    isPrepareTxPending ||
-                    isSubmitRpcPending ||
-                    !betAmount ||
-                    Number(betAmount) <= 0
-                  }
-                  style={{
-                    backgroundColor: currencyPairData[selectedPair].color,
-                    borderColor: currencyPairData[selectedPair].color,
-                    fontSize: "1.2rem",
-                    padding: "1rem 2rem",
-                  }}
-                >
-                  {isLoading || isPrepareTxPending || isSubmitRpcPending
-                    ? "Starting..."
-                    : "🚀 Start Battle!"}
-                </Button>
-              </div>
             </div>
           )}
         </>
