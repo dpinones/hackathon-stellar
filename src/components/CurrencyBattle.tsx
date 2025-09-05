@@ -360,7 +360,7 @@ export const CurrencyBattle: React.FC = () => {
   };
 
   const formatPrice = (price: number) => {
-    return `$${(price / 1000000).toFixed(6)}`;
+    return `$${(price / 100000000000000).toFixed(6)}`;
   };
 
   if (!address) {
