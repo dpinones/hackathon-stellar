@@ -248,7 +248,28 @@ export const CurrencyBattle: React.FC = () => {
         setUserWinnings(0);
       }
 
-      // Skip other calls for now to focus on the main issue
+      // Get current ARS price
+      try {
+        const priceTx = await contract.get_current_ars_price();
+        const simResult = await priceTx.simulate();
+        console.log("Current price result:", simResult.result);
+        
+        let price: any = null;
+        if (simResult.result && typeof simResult.result === 'object') {
+          if ('value' in simResult.result) {
+            price = simResult.result.value;
+          } else {
+            price = simResult.result;
+          }
+        }
+        
+        if (price !== null) {
+          setCurrentPrice(Number(price));
+        }
+      } catch (err) {
+        console.log("Could not fetch current price:", err);
+      }
+
       console.log("State loading completed");
 
     } catch (err) {
