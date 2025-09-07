@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, vec, Env, String, Vec, Symbol, Address, contracterror, token, symbol_short};
+use soroban_sdk::{contract, contractimpl, contracttype, Env, Vec, Address, contracterror, token, symbol_short};
 
 // Import the Reflector code
 mod reflector;
@@ -15,77 +15,262 @@ pub struct Contract;
 pub enum Error {
     NoPrice = 1,
     LowBalance = 2,
-    Broke = 3,
-    NoBattle = 4,
-    TimeNotPassed = 5,
-    InvalidPair = 6,
-    BattleAlreadyExists = 7,
-    TooClose = 8,
+    InsufficientFunds = 3,
+    NoActiveRound = 4,
+    RoundNotSettled = 5,
+    RoundAlreadySettled = 6,
+    BettingClosed = 7,
+    InvalidPrediction = 8,
+    NoWinnings = 9,
+    OracleTimeout = 10,
 }
 
-// Enum for currency pairs
+// Prediction types for ARS price movement
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum CurrencyPair {
-    ArsChf,  // ARS vs CHF
-    BrlEur,  // BRL vs EUR  
-    MxnXau,  // MXN vs XAU (Gold)
+pub enum Prediction {
+    Up,     // ARS goes up > +0.05%
+    Down,   // ARS goes down < -0.05%
+    Stable, // ARS stays between -0.05% and +0.05%
 }
 
-// Data Structure for representing a participant in a battle
+// Data Structure for representing a bet
 #[contracttype]
 #[derive(Clone)]
-pub struct Participant {
+pub struct Bet {
     pub user: Address,
-    pub chosen_currency: u32, // 0 for first currency, 1 for second currency
+    pub prediction: Prediction,
     pub amount: i128,
 }
 
-// Data Structure for representing a battle
+// Data Structure for representing a lottery round
 #[contracttype]
 #[derive(Clone)]
-pub struct Battle {
-    pub pair: CurrencyPair,
-    pub participants: Vec<Participant>,
+pub struct Round {
+    pub round_number: u32,
     pub start_time: u64,
-    pub start_price_1: i128,
-    pub start_price_2: i128,
+    pub start_price: i128,
+    pub end_price: Option<i128>,
+    pub bets: Vec<Bet>,
     pub is_settled: bool,
+    pub winning_prediction: Option<Prediction>,
+    pub total_pool: i128,
+    pub up_pool: i128,
+    pub down_pool: i128,
+    pub stable_pool: i128,
+}
+
+// Storage keys
+#[contracttype]
+pub enum DataKey {
+    CurrentRound,
+    Round(u32),
+    UserWinnings(Address),
+    LastSettleTime,
+    RoundCounter,
 }
 
 #[contractimpl]
 impl Contract {
-    // Get currency ticker symbols for a pair
-    fn get_currency_symbols(pair: CurrencyPair) -> (Symbol, Symbol) {
-        match pair {
-            CurrencyPair::ArsChf => (symbol_short!("ARS"), symbol_short!("CHF")),
-            CurrencyPair::BrlEur => (symbol_short!("BRL"), symbol_short!("EUR")),
-            CurrencyPair::MxnXau => (symbol_short!("MXN"), symbol_short!("XAU")),
+    // =============================================================================
+    // MAIN FUNCTIONS (Public API for users)
+    // =============================================================================
+
+    // Place a bet on the current round - creates new round if none exists or current is closed
+    pub fn place_bet(env: Env, user: Address, prediction: Prediction, amount: i128) -> Result<u32, Error> {
+        user.require_auth();
+
+        if amount <= 0 {
+            return Err(Error::InsufficientFunds);
         }
+
+        // Check if we need to create a new round
+        let current_time = env.ledger().timestamp();
+        let current_round_number = env.storage().instance()
+            .get::<DataKey, u32>(&DataKey::CurrentRound);
+            
+        let round_number = match current_round_number {
+            Some(round_num) => {
+                let existing_round = env.storage().instance()
+                    .get::<DataKey, Round>(&DataKey::Round(round_num));
+                    
+                match existing_round {
+                    Some(round) => {
+                        // Check if round is still accepting bets and not settled
+                        if !round.is_settled && current_time < round.start_time + 300 {
+                            round_num // Use existing round
+                        } else {
+                            // Create new round
+                            Self::start_new_round(env.clone())?
+                        }
+                    }
+                    None => Self::start_new_round(env.clone())?
+                }
+            }
+            None => Self::start_new_round(env.clone())? // First round ever
+        };
+            
+        let mut round = env.storage().instance()
+            .get::<DataKey, Round>(&DataKey::Round(round_number))
+            .ok_or(Error::NoActiveRound)?;
+
+        // Double-check round is accepting bets (should be guaranteed by logic above)
+        if current_time >= round.start_time + 300 || round.is_settled {
+            return Err(Error::BettingClosed);
+        }
+
+        // Check user balance
+        let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let native_client = token::Client::new(&env, &native_asset_address);
+        let balance = native_client.balance(&user);
+
+        if amount > balance { 
+            return Err(Error::LowBalance);
+        }
+
+        // Create the bet
+        let bet = Bet {
+            user: user.clone(),
+            prediction: prediction.clone(),
+            amount,
+        };
+
+        // Add bet to round
+        round.bets.push_back(bet);
+        round.total_pool += amount;
+        
+        // Update pool amounts by prediction
+        match prediction {
+            Prediction::Up => round.up_pool += amount,
+            Prediction::Down => round.down_pool += amount,
+            Prediction::Stable => round.stable_pool += amount,
+        }
+
+        // Store updated round
+        env.storage().instance().set(&DataKey::Round(round_number), &round);
+
+        // Transfer tokens to contract
+        native_client.transfer(&user, &env.current_contract_address(), &amount);
+
+        Ok(round_number)
     }
 
-    // Fetch current price for a currency
-    fn fetch_price(env: &Env, ticker: Symbol) -> Result<i128, Error> {
+    // Claim winnings for a user - auto-settles current round if ready
+    pub fn claim_winnings(env: Env, user: Address) -> Result<i128, Error> {
+        user.require_auth();
+
+        // Auto-settle current round if it's ready
+        if let Some(current_round_number) = env.storage().instance()
+            .get::<DataKey, u32>(&DataKey::CurrentRound) {
+            
+            if let Some(round) = env.storage().instance()
+                .get::<DataKey, Round>(&DataKey::Round(current_round_number)) {
+                
+                // Check if round is ready to settle (not settled and past 5 minutes)
+                let current_time = env.ledger().timestamp();
+                if !round.is_settled && current_time >= round.start_time + 300 {
+                    // Auto-settle the round
+                    let _ = Self::internal_settle_round(env.clone(), current_round_number);
+                }
+            }
+        }
+
+        let winnings = env.storage().instance()
+            .get::<DataKey, i128>(&DataKey::UserWinnings(user.clone()))
+            .unwrap_or(0);
+
+        if winnings <= 0 {
+            return Err(Error::NoWinnings);
+        }
+
+        // Clear user's winnings
+        env.storage().instance().set(&DataKey::UserWinnings(user.clone()), &0i128);
+
+        // Transfer winnings to user
+        let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let native_client = token::Client::new(&env, &native_asset_address);
+        native_client.transfer(&env.current_contract_address(), &user, &winnings);
+
+        Ok(winnings)
+    }
+
+
+    // =============================================================================
+    // VIEW FUNCTIONS (Read-only queries)
+    // =============================================================================
+
+    // Get current round information
+    pub fn get_current_round(env: Env) -> Result<Round, Error> {
+        let current_round_number = env.storage().instance()
+            .get::<DataKey, u32>(&DataKey::CurrentRound)
+            .ok_or(Error::NoActiveRound)?;
+            
+        env.storage().instance().get::<DataKey, Round>(&DataKey::Round(current_round_number))
+            .ok_or(Error::NoActiveRound)
+    }
+
+    // Get specific round information
+    pub fn get_round(env: Env, round_number: u32) -> Option<Round> {
+        env.storage().instance().get::<DataKey, Round>(&DataKey::Round(round_number))
+    }
+
+    // Get current active round number (0 if none)
+    pub fn get_current_round_number(env: Env) -> u32 {
+        env.storage().instance()
+            .get::<DataKey, u32>(&DataKey::CurrentRound)
+            .unwrap_or(0)
+    }
+
+    // Get total number of rounds created
+    pub fn get_total_rounds(env: Env) -> u32 {
+        env.storage().instance()
+            .get::<DataKey, u32>(&DataKey::RoundCounter)
+            .unwrap_or(0)
+    }
+
+    // Get list of completed round numbers
+    pub fn get_completed_rounds(env: Env, limit: u32) -> Vec<u32> {
+        let mut completed_rounds = Vec::new(&env);
+        let total_rounds = Self::get_total_rounds(env.clone());
+        
+        let start_round = if total_rounds > limit { total_rounds - limit + 1 } else { 1 };
+        
+        for round_num in start_round..=total_rounds {
+            if let Some(round) = env.storage().instance().get::<DataKey, Round>(&DataKey::Round(round_num)) {
+                if round.is_settled {
+                    completed_rounds.push_back(round_num);
+                }
+            }
+        }
+        
+        completed_rounds
+    }
+
+    // Get user's claimable winnings
+    pub fn get_user_winnings(env: Env, user: Address) -> i128 {
+        env.storage().instance()
+            .get::<DataKey, i128>(&DataKey::UserWinnings(user))
+            .unwrap_or(0)
+    }
+
+    // Get round betting statistics
+    pub fn get_round_stats(env: Env, round_number: u32) -> Option<(i128, i128, i128, i128)> {
+        let round = env.storage().instance().get::<DataKey, Round>(&DataKey::Round(round_number))?;
+        Some((round.total_pool, round.up_pool, round.down_pool, round.stable_pool))
+    }
+
+    // Get current ARS price
+    pub fn get_current_ars_price(env: Env) -> Result<i128, Error> {
+        Self::fetch_ars_price(&env)
+    }
+
+    // Last five ARS prices for historical view
+    pub fn fetch_last_five_ars_prices(env: Env) -> Result<Vec<i128>, Error> {
         let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
         let reflector_client = ReflectorClient::new(&env, &oracle_address);
         
-        let asset = ReflectorAsset::Other(ticker);
-        let recent = reflector_client.lastprice(&asset);
-        
-        if recent.is_none() {
-            return Err(Error::NoPrice);
-        }
-        
-        Ok(recent.unwrap().price)
-    }
-
-    // Last five prices
-    pub fn fetch_last_five_prices(env: &Env, ticker: Symbol) -> Result<Vec<i128>, Error> {
-        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
-        let reflector_client = ReflectorClient::new(&env, &oracle_address);
-        
-        let asset = ReflectorAsset::Other(ticker);
-        let recents = reflector_client.prices(&asset, &5);
+        let ars_asset = ReflectorAsset::Other(symbol_short!("ARS"));
+        let recents = reflector_client.prices(&ars_asset, &5);
         
         if recents.is_none() {
             return Err(Error::NoPrice);
@@ -101,220 +286,178 @@ impl Contract {
         Ok(prices)
     }
 
-    // Start or join a currency battle
-    pub fn start_battle(env: Env, user: Address, pair: CurrencyPair, chosen_currency: u32, amount: i128) -> Result<bool, Error> {
-        user.require_auth();
-
-        if amount <= 0 {
-            return Err(Error::LowBalance);
-        }
-
-        if chosen_currency > 1 {
-            return Err(Error::InvalidPair);
-        }
-
-        // Check user balance
-        let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
-        let native_client = token::Client::new(&env, &native_asset_address);
-        let balance = native_client.balance(&user);
-
-        if amount > balance { 
-            return Err(Error::LowBalance);
-        }
-
-        let battle_key = pair;
-        
-        // Check if battle already exists for this pair
-        let mut battle = if let Some(existing_battle) = env.storage().instance().get::<CurrencyPair, Battle>(&battle_key) {
-            // Check if battle is already settled
-            if existing_battle.is_settled {
-                return Err(Error::BattleAlreadyExists);
-            }
-            
-            // Check if user is already participating
-            for participant in existing_battle.participants.iter() {
-                if participant.user == user {
-                    return Err(Error::BattleAlreadyExists);
-                }
-            }
-            
-            existing_battle
-        } else {
-            // Create new battle - first person starts it
-            let (symbol1, symbol2) = Self::get_currency_symbols(pair);
-            let price1 = Self::fetch_price(&env, symbol1)?;
-            let price2 = Self::fetch_price(&env, symbol2)?;
-            
-            Battle {
-                pair,
-                participants: Vec::new(&env),
-                start_time: env.ledger().timestamp(),
-                start_price_1: price1,
-                start_price_2: price2,
-                is_settled: false,
-            }
-        };
-
-        // Add participant to battle
-        let participant = Participant {
-            user: user.clone(),
-            chosen_currency,
-            amount,
-        };
-        battle.participants.push_back(participant);
-
-        // Store the updated battle
-        env.storage().instance().set(&battle_key, &battle);
-
-        // Transfer tokens to contract
-        native_client.transfer(&user, &env.current_contract_address(), &amount);
-
-        Ok(true)
-    }
-
-    // Settle a battle after 5 minutes - anyone can call this
-    pub fn settle_battle(env: Env, user: Address, pair: CurrencyPair) -> Result<bool, Error> {
-        user.require_auth();
-
-        // Get the battle
-        let battle_key = pair;
-        let mut battle: Battle = env.storage().instance().get(&battle_key).ok_or(Error::NoBattle)?;
-
-        // Check if already settled
-        if battle.is_settled {
-            return Err(Error::BattleAlreadyExists);
-        }
-
-        // Verify if 5 minutes passed
-        if env.ledger().timestamp() < battle.start_time + 300 {
-            return Err(Error::TimeNotPassed);
-        }
-
-        // Get currency symbols for the pair
-        let (symbol1, symbol2) = Self::get_currency_symbols(pair);
-
-        // Fetch historical prices at battle start time and end time
-        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
-        let reflector_client = ReflectorClient::new(&env, &oracle_address);
-
-        let asset1 = ReflectorAsset::Other(symbol1);
-        let asset2 = ReflectorAsset::Other(symbol2);
-
-        // Fetch end prices at exactly battle.start_time + 300
-        let end_time = battle.start_time + 300;
-        let end_price1 = reflector_client.price(&asset1, &end_time);
-        let end_price2 = reflector_client.price(&asset2, &end_time);
-
-        if end_price1.is_none() || end_price2.is_none() {
-            return Err(Error::NoPrice);
-        }
-
-        let final_price1 = end_price1.unwrap().price;
-        let final_price2 = end_price2.unwrap().price;
-
-        // Calculate percentage changes
-        // % change = (new - old) / old * 10000 (using 10000 for precision since we can't use floats)
-        let change1 = ((final_price1 - battle.start_price_1) * 10000) / battle.start_price_1;
-        let change2 = ((final_price2 - battle.start_price_2) * 10000) / battle.start_price_2;
-
-        // Determine winning currency (higher percentage change wins)
-        let winning_currency = if change1 > change2 { 0 } else { 1 };
-
-        // Check for tie (difference less than 0.05% = 5 basis points)
-        let is_tie = if change1 > change2 { 
-            change1 - change2 < 5 
-        } else { 
-            change2 - change1 < 5 
-        };
-
-        // Mark battle as settled
-        battle.is_settled = true;
-        env.storage().instance().set(&battle_key, &battle);
-
-        // Handle settlement - distribute winnings
-        let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
-        let native_client = token::Client::new(&env, &native_asset_address);
-
-        if is_tie {
-            // Return original bet amounts to all participants
-            for participant in battle.participants.iter() {
-                native_client.transfer(&env.current_contract_address(), &participant.user, &participant.amount);
-            }
-            return Ok(false);
-        }
-
-        // Calculate total pool and winning pool
-        let mut total_pool: i128 = 0;
-        let mut winning_pool: i128 = 0;
-        
-        for participant in battle.participants.iter() {
-            total_pool += participant.amount;
-            if participant.chosen_currency == winning_currency {
-                winning_pool += participant.amount;
-            }
-        }
-
-        // Distribute winnings proportionally to winners
-        for participant in battle.participants.iter() {
-            if participant.chosen_currency == winning_currency {
-                // Winner gets their proportion of the total pool
-                let winnings = (participant.amount * total_pool) / winning_pool;
-                native_client.transfer(&env.current_contract_address(), &participant.user, &winnings);
-            }
-            // Losers get nothing (their funds stay in contract or are distributed to winners)
-        }
-
-        Ok(true)
-    }
-
-    // Get active battle for a currency pair
-    pub fn get_battle(env: Env, pair: CurrencyPair) -> Option<Battle> {
-        let battle_key = pair;
-        env.storage().instance().get(&battle_key)
-    }
-
-    // Check if user is participating in a battle for this pair
-    pub fn is_user_in_battle(env: Env, user: Address, pair: CurrencyPair) -> bool {
-        let battle_key = pair;
-        if let Some(battle) = env.storage().instance().get::<CurrencyPair, Battle>(&battle_key) {
-            for participant in battle.participants.iter() {
-                if participant.user == user {
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    // Get current prices for a currency pair
-    pub fn get_pair_prices(env: Env, pair: CurrencyPair) -> Result<(i128, i128), Error> {
-        let (symbol1, symbol2) = Self::get_currency_symbols(pair);
-        let price1 = Self::fetch_price(&env, symbol1)?;
-        let price2 = Self::fetch_price(&env, symbol2)?;
-        Ok((price1, price2))
-    }
-
-    // Check if battle time has elapsed (5 minutes)
-    pub fn is_battle_ready(env: Env, pair: CurrencyPair) -> bool {
-        let battle_key = pair;
-        if let Some(battle) = env.storage().instance().get::<CurrencyPair, Battle>(&battle_key) {
-            !battle.is_settled && env.ledger().timestamp() >= battle.start_time + 300
+    // Check if current round is accepting bets
+    pub fn is_betting_open(env: Env) -> bool {
+        if let Ok(round) = Self::get_current_round(env.clone()) {
+            let current_time = env.ledger().timestamp();
+            !round.is_settled && current_time < round.start_time + 300
         } else {
             false
         }
     }
 
-    // Get available currency pairs
-    pub fn get_available_pairs(_env: Env) -> Vec<CurrencyPair> {
-        vec![
-            &_env,
-            CurrencyPair::ArsChf,
-            CurrencyPair::BrlEur,
-            CurrencyPair::MxnXau,
-        ]
+    // Check if current round is ready to settle
+    pub fn is_round_ready_to_settle(env: Env) -> bool {
+        if let Ok(round) = Self::get_current_round(env.clone()) {
+            let current_time = env.ledger().timestamp();
+            !round.is_settled && current_time >= round.start_time + 300
+        } else {
+            false
+        }
     }
 
-    pub fn hello(env: Env, to: String) -> Vec<String> {
-        vec![&env, String::from_str(&env, "Hello"), to]
+    // =============================================================================
+    // INTERNAL FUNCTIONS (Private helpers)
+    // =============================================================================
+
+    // Initialize a new lottery round (internal use only)
+    fn start_new_round(env: Env) -> Result<u32, Error> {
+        let current_time: u64 = env.ledger().timestamp();
+        
+        // Get and increment round counter
+        let round_counter = env.storage().instance()
+            .get::<DataKey, u32>(&DataKey::RoundCounter)
+            .unwrap_or(0);
+        
+        let new_round_number = round_counter + 1;
+        env.storage().instance().set(&DataKey::RoundCounter, &new_round_number);
+        
+        // Fetch initial ARS price
+        let initial_price = Self::fetch_ars_price(&env)?;
+        
+        let new_round = Round {
+            round_number: new_round_number,
+            start_time: current_time,
+            start_price: initial_price,
+            end_price: None,
+            bets: Vec::new(&env),
+            is_settled: false,
+            winning_prediction: None,
+            total_pool: 0,
+            up_pool: 0,
+            down_pool: 0,
+            stable_pool: 0,
+        };
+        
+        // Store the new round
+        env.storage().instance().set(&DataKey::Round(new_round_number), &new_round);
+        env.storage().instance().set(&DataKey::CurrentRound, &new_round_number);
+        
+        Ok(new_round_number)
+    }
+
+    // Internal settle function used by both public settle and claim_winnings
+    fn internal_settle_round(env: Env, round_number: u32) -> Result<bool, Error> {
+
+        let mut round = env.storage().instance()
+            .get::<DataKey, Round>(&DataKey::Round(round_number))
+            .ok_or(Error::NoActiveRound)?;
+
+        // Check if already settled
+        if round.is_settled {
+            return Err(Error::RoundAlreadySettled);
+        }
+
+        // Verify if 5 minutes passed
+        let current_time = env.ledger().timestamp();
+        if current_time < round.start_time + 300 {
+            return Err(Error::BettingClosed); // Still in betting phase
+        }
+
+        // Fetch end price at exactly start_time + 300
+        let end_time = round.start_time + 300;
+        let end_price = Self::fetch_ars_price_at_time(&env, end_time)?;
+        
+        round.end_price = Some(end_price);
+
+        // Calculate percentage change
+        // % change = (new - old) / old * 10000 (using 10000 for precision)
+        let change = ((end_price - round.start_price) * 10000) / round.start_price;
+
+        // Determine winning prediction
+        // >+0.05% = 5 basis points, <-0.05% = -5 basis points
+        let winning_prediction = if change > 5 {
+            Prediction::Up
+        } else if change < -5 {
+            Prediction::Down
+        } else {
+            Prediction::Stable
+        };
+
+        round.winning_prediction = Some(winning_prediction.clone());
+        round.is_settled = true;
+
+        // Distribute winnings
+        let native_asset_address = Address::from_str(&env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
+        let _native_client = token::Client::new(&env, &native_asset_address);
+
+        // Get winning pool size
+        let winning_pool = match winning_prediction {
+            Prediction::Up => round.up_pool,
+            Prediction::Down => round.down_pool,
+            Prediction::Stable => round.stable_pool,
+        };
+
+        if winning_pool > 0 {
+            // Calculate 5% fee for next round
+            let fee = round.total_pool / 20; // 5%
+            let distributable_pool = round.total_pool - fee;
+            
+            // Distribute proportional winnings to winners
+            for bet in round.bets.iter() {
+                if bet.prediction == winning_prediction {
+                    let user_winnings = (bet.amount * distributable_pool) / winning_pool;
+                    
+                    // Add to user's claimable winnings
+                    let current_winnings = env.storage().instance()
+                        .get::<DataKey, i128>(&DataKey::UserWinnings(bet.user.clone()))
+                        .unwrap_or(0);
+                    
+                    env.storage().instance().set(
+                        &DataKey::UserWinnings(bet.user.clone()),
+                        &(current_winnings + user_winnings)
+                    );
+                }
+            }
+            
+            // Keep fee in contract for next round
+        } else {
+            // No winners, carry over entire pool to next round
+        }
+
+        // Store updated round
+        env.storage().instance().set(&DataKey::Round(round_number), &round);
+        env.storage().instance().set(&DataKey::LastSettleTime, &current_time);
+
+        Ok(true)
+    }
+
+    // Fetch current ARS price from oracle
+    fn fetch_ars_price(env: &Env) -> Result<i128, Error> {
+        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
+        let reflector_client = ReflectorClient::new(&env, &oracle_address);
+        
+        let ars_asset = ReflectorAsset::Other(symbol_short!("ARS"));
+        let recent = reflector_client.lastprice(&ars_asset);
+        
+        if recent.is_none() {
+            return Err(Error::NoPrice);
+        }
+        
+        Ok(recent.unwrap().price)
+    }
+
+    // Fetch ARS price at specific timestamp
+    fn fetch_ars_price_at_time(env: &Env, timestamp: u64) -> Result<i128, Error> {
+        let oracle_address = Address::from_str(&env, "CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W");
+        let reflector_client = ReflectorClient::new(&env, &oracle_address);
+        
+        let ars_asset = ReflectorAsset::Other(symbol_short!("ARS"));
+        let price_data = reflector_client.price(&ars_asset, &timestamp);
+        
+        if price_data.is_none() {
+            return Err(Error::NoPrice);
+        }
+        Ok(price_data.unwrap().price)
     }
 }

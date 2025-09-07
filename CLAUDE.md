@@ -2,76 +2,109 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Commands
+## Project Overview
 
-### Development
-
-- `npm run dev` - Start development server with auto-generated contract clients and Vite hot reload
-- `npm start` - Start Vite development server only
-- `npm run build` - Build TypeScript and create production build
-- `npm run preview` - Preview production build
-
-### Contract Development
-
-- `stellar scaffold watch --build-clients` - Watch contracts and auto-generate TypeScript clients
-- `stellar container start` - Start local Stellar node, RPC, API, and friendbot for testing
-- `stellar contract build` - Build contracts (or `make` in contracts/increment/)
-- `cargo test` - Run contract tests (in contracts/increment/)
-
-### Code Quality
-
-- `npm run lint` - Run ESLint
-- `npm run format` - Format code with Prettier
-- `npm run install:contracts` - Install and build contract packages
-
-### Contract Deployment
-
-- `stellar registry publish` - Publish contract to registry
-- `stellar registry deploy --deployed-name NAME --published-name NAME -- --param1 value1` - Deploy with constructor params
-- `stellar registry install CONTRACT_NAME` - Install deployed contract locally
+Currency Clash Arena is a gamified decentralized betting application built on Stellar blockchain, focused on currency volatility prediction. Users bet testnet tokens to predict if ARS (Argentine Peso) will rise, fall, or remain stable over 5-minute intervals, validated by the Reflector oracle.
 
 ## Architecture
 
-### Project Structure
+### Smart Contract (Rust/Soroban)
+- **Location**: `contracts/increment/src/lib.rs`
+- **Oracle Integration**: Uses Reflector oracle at `CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W` for price data
+- **Contract ID**: `CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM`
+- **Native Token**: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
 
-This is a Scaffold Stellar project - a full-stack Stellar dApp with both smart contracts and frontend:
+**Key Features**:
+- Currency battle system with 5-minute rounds
+- Three currency pairs: ARS/CHF, BRL/EUR, MXN/XAU
+- Oracle price fetching and battle settlement
+- Token escrow and proportional winnings distribution
 
-- **contracts/** - Rust smart contracts using Soroban SDK
-- **packages/** - Auto-generated TypeScript clients from contracts
-- **src/** - React frontend application
-  - **components/** - Reusable UI components (ConnectAccount, WalletButton, etc.)
-  - **contracts/** - Contract interaction helpers and utilities
-  - **debug/** - Complete contract debugging interface with form generation
-  - **hooks/** - React hooks for wallet, notifications, balances
-  - **pages/** - Main application pages (Home, Debugger)
-  - **providers/** - Context providers for wallet and notifications
+### Frontend (React + TypeScript)
+- **Framework**: Vite + React + TypeScript
+- **Stellar Integration**: @stellar/stellar-sdk v14.0.0-rc.3, @creit.tech/stellar-wallets-kit
+- **Main Component**: `src/components/CurrencyBattle.tsx` - core betting interface
+- **Design System**: @stellar/design-system for UI components
+- **Routing**: React Router for /debug page with contract debugger
 
-### Key Technologies
+## Development Commands
 
-- **Frontend:** Vite + React 19 + TypeScript + Stellar Design System
-- **Smart Contracts:** Rust + Soroban SDK
-- **Wallet Integration:** @creit.tech/stellar-wallets-kit
-- **State Management:** @tanstack/react-query for server state, React Context for app state
-- **Routing:** React Router v6
+### Build & Development
+```bash
+# Start development with contract watching
+npm run dev
 
-### Contract Integration
+# Build project  
+npm run build
 
-The project uses auto-generated TypeScript clients that provide type-safe contract interaction. The `stellar scaffold watch --build-clients` command monitors contract changes and regenerates clients automatically. Contract utilities in `src/contracts/` handle common operations like contract calls and transaction submission.
+# Install contract dependencies
+npm run install:contracts
 
-### Development Workflow
+# Lint code
+npm run lint
 
-1. Contracts are built and generate WASM files in `target/wasm32v1-none/release/`
-2. TypeScript clients are auto-generated in `packages/` from contract metadata
-3. Frontend imports these clients for type-safe contract interaction
-4. The debugger page provides a complete UI for testing contract methods
+# Format code
+npm run format
+```
 
-### Environment Configuration
+### Contract Development
+```bash
+# Watch contracts and rebuild clients
+stellar scaffold watch --build-clients
 
-- `environments.toml` - Stellar network configurations
-- `.env` - Local environment variables (copy from `.env.example`)
-- Contract IDs are stored in `contract-ids/` directory
+# From contracts/increment directory:
+make build        # Build contract
+make test         # Run tests
+```
 
-### Testing
+## Contract Interface
 
-- Contract tests: Run `cargo test` in contract directories
-- Frontend: Uses React Query for async state management with built-in error handling
+### Core Functions
+- `start_battle(user, pair, chosen_currency, amount)` - Join or create currency battle
+- `settle_battle(user, pair)` - Settle completed battle (5min+ after start)
+- `get_battle(pair)` - Get active battle information
+- `get_pair_prices(pair)` - Get current currency prices
+- `fetch_last_five_prices(ticker)` - Get price history
+
+### Data Structures
+- `CurrencyPair`: ArsChf, BrlEur, MxnXau enum
+- `Battle`: Contains participants, start time, prices, settlement status
+- `Participant`: User address, chosen currency (0/1), bet amount
+
+## Frontend Integration
+
+### Wallet Connection
+- Uses `useWallet` hook for Stellar wallet integration
+- Handles Freighter/Albedo wallet connections
+- Network: Standalone testnet (passphrase: "Standalone Network ; February 2017")
+
+### Contract Interaction Pattern
+1. Create Client instance with user's public key
+2. Call contract method with `simulate: true`
+3. Use `useRpcPrepareTx` to prepare transaction
+4. Sign with wallet and submit via `useSubmitRpcTx`
+
+### State Management
+- Battle state loaded on component mount and wallet changes
+- Real-time countdown timer for active battles
+- Price data fetching for current and historical prices
+
+## Key Directories
+
+- `src/components/` - React components including main CurrencyBattle
+- `src/debug/` - Comprehensive contract debugging interface with hooks/utils
+- `contracts/increment/` - Rust smart contract source
+- `src/contracts/` - TypeScript contract client and utilities
+- `contract-ids/` - Contract deployment IDs
+
+## Testing & Deployment
+
+The project includes extensive debugging infrastructure in `src/debug/` with form generators for all contract methods, transaction validation, and XDR viewers. Use the `/debug` route for contract interaction testing.
+
+## Oracle Integration
+
+The contract integrates with Reflector oracle for real-time price data:
+- Base currency pricing in USD
+- 5-minute price resolution
+- Historical price queries for battle settlement
+- Cross-price calculations for currency pairs

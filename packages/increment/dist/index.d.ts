@@ -7,7 +7,7 @@ export * as rpc from '@stellar/stellar-sdk/rpc';
 export declare const networks: {
     readonly standalone: {
         readonly networkPassphrase: "Standalone Network ; February 2017";
-        readonly contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC";
+        readonly contractId: "CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM";
     };
 };
 export declare const Errors: {
@@ -35,57 +35,64 @@ export declare const Errors: {
     8: {
         message: string;
     };
+    9: {
+        message: string;
+    };
+    10: {
+        message: string;
+    };
 };
-export type CurrencyPair = {
-    tag: "ArsChf";
+export type Prediction = {
+    tag: "Up";
     values: void;
 } | {
-    tag: "BrlEur";
+    tag: "Down";
     values: void;
 } | {
-    tag: "MxnXau";
+    tag: "Stable";
     values: void;
 };
-export interface Participant {
+export interface Bet {
     amount: i128;
-    chosen_currency: u32;
+    prediction: Prediction;
     user: string;
 }
-export interface Battle {
+export interface Round {
+    bets: Array<Bet>;
+    down_pool: i128;
+    end_price: Option<i128>;
     is_settled: boolean;
-    pair: CurrencyPair;
-    participants: Array<Participant>;
-    start_price_1: i128;
-    start_price_2: i128;
+    round_number: u32;
+    stable_pool: i128;
+    start_price: i128;
     start_time: u64;
+    total_pool: i128;
+    up_pool: i128;
+    winning_prediction: Option<Prediction>;
 }
+export type DataKey = {
+    tag: "CurrentRound";
+    values: void;
+} | {
+    tag: "Round";
+    values: readonly [u32];
+} | {
+    tag: "UserWinnings";
+    values: readonly [string];
+} | {
+    tag: "LastSettleTime";
+    values: void;
+} | {
+    tag: "RoundCounter";
+    values: void;
+};
 export interface Client {
     /**
-     * Construct and simulate a fetch_last_five_prices transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     * Construct and simulate a place_bet transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
-    fetch_last_five_prices: ({ ticker }: {
-        ticker: string;
-    }, options?: {
-        /**
-         * The fee to pay for the transaction. Default: BASE_FEE
-         */
-        fee?: number;
-        /**
-         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-         */
-        timeoutInSeconds?: number;
-        /**
-         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-         */
-        simulate?: boolean;
-    }) => Promise<AssembledTransaction<Result<Array<i128>>>>;
-    /**
-     * Construct and simulate a start_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-     */
-    start_battle: ({ user, pair, chosen_currency, amount }: {
+    place_bet: ({ user, prediction, amount }: {
         user: string;
-        pair: CurrencyPair;
-        chosen_currency: u32;
+        prediction: Prediction;
         amount: i128;
     }, options?: {
         /**
@@ -100,13 +107,12 @@ export interface Client {
          * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
          */
         simulate?: boolean;
-    }) => Promise<AssembledTransaction<Result<boolean>>>;
+    }) => Promise<AssembledTransaction<Result<u32>>>;
     /**
-     * Construct and simulate a settle_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     * Construct and simulate a claim_winnings transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
-    settle_battle: ({ user, pair }: {
+    claim_winnings: ({ user }: {
         user: string;
-        pair: CurrencyPair;
     }, options?: {
         /**
          * The fee to pay for the transaction. Default: BASE_FEE
@@ -120,12 +126,29 @@ export interface Client {
          * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
          */
         simulate?: boolean;
-    }) => Promise<AssembledTransaction<Result<boolean>>>;
+    }) => Promise<AssembledTransaction<Result<i128>>>;
     /**
-     * Construct and simulate a get_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     * Construct and simulate a get_current_round transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
-    get_battle: ({ pair }: {
-        pair: CurrencyPair;
+    get_current_round: (options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<Result<Round>>>;
+    /**
+     * Construct and simulate a get_round transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    get_round: ({ round_number }: {
+        round_number: u32;
     }, options?: {
         /**
          * The fee to pay for the transaction. Default: BASE_FEE
@@ -139,14 +162,136 @@ export interface Client {
          * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
          */
         simulate?: boolean;
-    }) => Promise<AssembledTransaction<Option<Battle>>>;
+    }) => Promise<AssembledTransaction<Option<Round>>>;
     /**
-     * Construct and simulate a is_user_in_battle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     * Construct and simulate a get_current_round_number transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
-    is_user_in_battle: ({ user, pair }: {
-        user: string;
-        pair: CurrencyPair;
+    get_current_round_number: (options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<u32>>;
+    /**
+     * Construct and simulate a get_total_rounds transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    get_total_rounds: (options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<u32>>;
+    /**
+     * Construct and simulate a get_completed_rounds transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    get_completed_rounds: ({ limit }: {
+        limit: u32;
     }, options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<Array<u32>>>;
+    /**
+     * Construct and simulate a get_user_winnings transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    get_user_winnings: ({ user }: {
+        user: string;
+    }, options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<i128>>;
+    /**
+     * Construct and simulate a get_round_stats transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    get_round_stats: ({ round_number }: {
+        round_number: u32;
+    }, options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<Option<readonly [i128, i128, i128, i128]>>>;
+    /**
+     * Construct and simulate a get_current_ars_price transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    get_current_ars_price: (options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<Result<i128>>>;
+    /**
+     * Construct and simulate a fetch_last_five_ars_prices transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    fetch_last_five_ars_prices: (options?: {
+        /**
+         * The fee to pay for the transaction. Default: BASE_FEE
+         */
+        fee?: number;
+        /**
+         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
+         */
+        timeoutInSeconds?: number;
+        /**
+         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
+         */
+        simulate?: boolean;
+    }) => Promise<AssembledTransaction<Result<Array<i128>>>>;
+    /**
+     * Construct and simulate a is_betting_open transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     */
+    is_betting_open: (options?: {
         /**
          * The fee to pay for the transaction. Default: BASE_FEE
          */
@@ -161,30 +306,9 @@ export interface Client {
         simulate?: boolean;
     }) => Promise<AssembledTransaction<boolean>>;
     /**
-     * Construct and simulate a get_pair_prices transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+     * Construct and simulate a is_round_ready_to_settle transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
      */
-    get_pair_prices: ({ pair }: {
-        pair: CurrencyPair;
-    }, options?: {
-        /**
-         * The fee to pay for the transaction. Default: BASE_FEE
-         */
-        fee?: number;
-        /**
-         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-         */
-        timeoutInSeconds?: number;
-        /**
-         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-         */
-        simulate?: boolean;
-    }) => Promise<AssembledTransaction<Result<readonly [i128, i128]>>>;
-    /**
-     * Construct and simulate a is_battle_ready transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-     */
-    is_battle_ready: ({ pair }: {
-        pair: CurrencyPair;
-    }, options?: {
+    is_round_ready_to_settle: (options?: {
         /**
          * The fee to pay for the transaction. Default: BASE_FEE
          */
@@ -198,42 +322,6 @@ export interface Client {
          */
         simulate?: boolean;
     }) => Promise<AssembledTransaction<boolean>>;
-    /**
-     * Construct and simulate a get_available_pairs transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-     */
-    get_available_pairs: (options?: {
-        /**
-         * The fee to pay for the transaction. Default: BASE_FEE
-         */
-        fee?: number;
-        /**
-         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-         */
-        timeoutInSeconds?: number;
-        /**
-         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-         */
-        simulate?: boolean;
-    }) => Promise<AssembledTransaction<Array<CurrencyPair>>>;
-    /**
-     * Construct and simulate a hello transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-     */
-    hello: ({ to }: {
-        to: string;
-    }, options?: {
-        /**
-         * The fee to pay for the transaction. Default: BASE_FEE
-         */
-        fee?: number;
-        /**
-         * The maximum amount of time to wait for the transaction to complete. Default: DEFAULT_TIMEOUT
-         */
-        timeoutInSeconds?: number;
-        /**
-         * Whether to automatically simulate the transaction when constructing the AssembledTransaction. Default: true
-         */
-        simulate?: boolean;
-    }) => Promise<AssembledTransaction<Array<string>>>;
 }
 export declare class Client extends ContractClient {
     readonly options: ContractClientOptions;
@@ -249,14 +337,18 @@ export declare class Client extends ContractClient {
     }): Promise<AssembledTransaction<T>>;
     constructor(options: ContractClientOptions);
     readonly fromJSON: {
-        fetch_last_five_prices: (json: string) => AssembledTransaction<Result<bigint[], import("@stellar/stellar-sdk/contract").ErrorMessage>>;
-        start_battle: (json: string) => AssembledTransaction<Result<boolean, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
-        settle_battle: (json: string) => AssembledTransaction<Result<boolean, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
-        get_battle: (json: string) => AssembledTransaction<Option<Battle>>;
-        is_user_in_battle: (json: string) => AssembledTransaction<boolean>;
-        get_pair_prices: (json: string) => AssembledTransaction<Result<readonly [bigint, bigint], import("@stellar/stellar-sdk/contract").ErrorMessage>>;
-        is_battle_ready: (json: string) => AssembledTransaction<boolean>;
-        get_available_pairs: (json: string) => AssembledTransaction<CurrencyPair[]>;
-        hello: (json: string) => AssembledTransaction<string[]>;
+        place_bet: (json: string) => AssembledTransaction<Result<number, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
+        claim_winnings: (json: string) => AssembledTransaction<Result<bigint, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
+        get_current_round: (json: string) => AssembledTransaction<Result<Round, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
+        get_round: (json: string) => AssembledTransaction<Option<Round>>;
+        get_current_round_number: (json: string) => AssembledTransaction<number>;
+        get_total_rounds: (json: string) => AssembledTransaction<number>;
+        get_completed_rounds: (json: string) => AssembledTransaction<number[]>;
+        get_user_winnings: (json: string) => AssembledTransaction<bigint>;
+        get_round_stats: (json: string) => AssembledTransaction<Option<readonly [bigint, bigint, bigint, bigint]>>;
+        get_current_ars_price: (json: string) => AssembledTransaction<Result<bigint, import("@stellar/stellar-sdk/contract").ErrorMessage>>;
+        fetch_last_five_ars_prices: (json: string) => AssembledTransaction<Result<bigint[], import("@stellar/stellar-sdk/contract").ErrorMessage>>;
+        is_betting_open: (json: string) => AssembledTransaction<boolean>;
+        is_round_ready_to_settle: (json: string) => AssembledTransaction<boolean>;
     };
 }

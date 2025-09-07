@@ -1,68 +1,51 @@
 import React, { useState, useEffect } from "react";
-import { Button, Icon } from "@stellar/design-system";
 import { useWallet } from "../hooks/useWallet";
 import * as Client from "increment";
 import { useSubmitRpcTx } from "../debug/hooks/useSubmitRpcTx";
 import { useRpcPrepareTx } from "../debug/hooks/useRpcPrepareTx";
 import { network } from "../contracts/util";
 import { getNetworkHeaders } from "../debug/util/getNetworkHeaders";
-import { VictoryAnimation, DefeatAnimation } from "./VictoryAnimation";
-import { BattleProgress } from "./BattleProgress";
 
-// Currency pair types matching the contract
-export enum CurrencyPair {
-  ArsChf = "ArsChf",
-  BrlEur = "BrlEur", 
-  MxnXau = "MxnXau",
+// Prediction types matching the new contract
+export enum Prediction {
+  Up = "Up",
+  Down = "Down", 
+  Stable = "Stable",
 }
 
-// Currency pair metadata
-const currencyPairData = {
-  [CurrencyPair.ArsChf]: {
-    name: "ARS vs CHF",
-    description: "Argentine Peso battles Swiss Franc",
-    currency1: { symbol: "ARS", name: "Argentine Peso", flag: "🇦🇷" },
-    currency2: { symbol: "CHF", name: "Swiss Franc", flag: "🇨🇭" },
-    color: "#74C2E1",
-  },
-  [CurrencyPair.BrlEur]: {
-    name: "BRL vs EUR", 
-    description: "Brazilian Real battles Euro",
-    currency1: { symbol: "BRL", name: "Brazilian Real", flag: "🇧🇷" },
-    currency2: { symbol: "EUR", name: "Euro", flag: "🇪🇺" },
-    color: "#FFD23F",
-  },
-  [CurrencyPair.MxnXau]: {
-    name: "MXN vs XAU",
-    description: "Mexican Peso battles Gold",
-    currency1: { symbol: "MXN", name: "Mexican Peso", flag: "🇲🇽" },
-    currency2: { symbol: "XAU", name: "Gold", flag: "🥇" },
-    color: "#FF6B9D",
-  },
-};
-
-interface BattleState {
-  pair: CurrencyPair;
-  chosenCurrency: number;
-  amount: string;
-  startTime?: number;
-  isActive: boolean;
+interface RoundState {
+  roundNumber: number;
+  startTime: number;
+  startPrice: number;
+  endPrice?: number;
+  isSettled: boolean;
+  winningPrediction?: Prediction;
+  totalPool: number;
+  upPool: number;
+  downPool: number;
+  stablePool: number;
   timeRemaining?: number;
+  isActive: boolean;
+}
+
+interface UserBet {
+  prediction: Prediction;
+  amount: string;
+  roundNumber: number;
 }
 
 export const CurrencyBattle: React.FC = () => {
   const { address, signTransaction } = useWallet();
-  const [selectedPair, setSelectedPair] = useState<CurrencyPair | null>(null);
-  const [currentBattle, setCurrentBattle] = useState<BattleState | null>(null);
+  const [currentRound, setCurrentRound] = useState<RoundState | null>(null);
+  const [userBet, setUserBet] = useState<UserBet | null>(null);
   const [betAmount, setBetAmount] = useState<string>("");
-  const [chosenCurrency, setChosenCurrency] = useState<number>(0);
-  const [currentPrices, setCurrentPrices] = useState<{[key in CurrencyPair]?: [number, number]}>({});
-  const [priceHistory, setPriceHistory] = useState<{[key in CurrencyPair]?: number[]}>({});
+  const [selectedPrediction, setSelectedPrediction] = useState<Prediction | null>(null);
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+  const [priceHistory, setPriceHistory] = useState<number[]>([]);
+  const [userWinnings, setUserWinnings] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showVictory, setShowVictory] = useState(false);
-  const [showDefeat, setShowDefeat] = useState(false);
-  const [battleResult, setBattleResult] = useState<{winner: string; amount: string} | null>(null);
+  const [completedRounds, setCompletedRounds] = useState<number[]>([]);
   
   const {
     mutate: prepareTx,
@@ -83,7 +66,7 @@ export const CurrencyBattle: React.FC = () => {
     if (isSubmitRpcSuccess) {
       setIsLoading(false);
       setError(null);
-      loadBattleState();
+      loadState();
     }
   }, [isSubmitRpcSuccess]);
 
@@ -130,103 +113,158 @@ export const CurrencyBattle: React.FC = () => {
     }
   }, [prepareTxData, signTransaction, address, submitRpc]);
 
-  // Load battle state and prices on mount and when address changes
+  // Load state on mount and when address changes
   useEffect(() => {
     if (address) {
-      loadBattleState();
-      loadCurrentPrices();
-      loadPriceHistory();
+      loadState();
     }
   }, [address]);
 
-  const loadBattleState = async () => {
-    if (!address) return;
-    
-    try {
-      const connectedContract = new Client.Client({
-        networkPassphrase: network.passphrase,
-        contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
-        rpcUrl: network.rpcUrl,
-        publicKey: address,
-        allowHttp: true,
-      });
-
-      // Check for active battles in each pair
-      for (const pair of Object.values(CurrencyPair)) {
-        try {
-          const battle = await connectedContract.get_user_battle({
-            user: address,
-            pair: pair,
-          });
-          
-          if (battle) {
-            const isReady = await connectedContract.is_battle_ready({
-              user: address,
-              pair: pair,
-            });
-            
-            setCurrentBattle({
-              pair: pair,
-              chosenCurrency: battle.chosen_currency,
-              amount: battle.amount.toString(),
-              startTime: Number(battle.start_time),
-              isActive: !isReady,
-              timeRemaining: isReady ? 0 : Math.max(0, (Number(battle.start_time) + 300) - Math.floor(Date.now() / 1000)),
-            });
-            setSelectedPair(pair);
-            break;
-          }
-        } catch (err) {
-          // No battle for this pair, continue checking
-        }
-      }
-    } catch (err) {
-      console.error("Error loading battle state:", err);
-    }
+  const getContract = () => {
+    if (!address) return null;
+    console.log("Creating contract client with:", {
+      contractId: "CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM",
+      rpcUrl: network.rpcUrl,
+      passphrase: network.passphrase,
+      address: address
+    });
+    return new Client.Client({
+      networkPassphrase: network.passphrase,
+      contractId: "CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM",
+      rpcUrl: network.rpcUrl,
+      publicKey: address,
+      allowHttp: true,
+    });
   };
 
-  const loadCurrentPrices = async () => {
-    if (!address) return;
+  const loadState = async () => {
+    const contract = getContract();
+    if (!contract) return;
     
     try {
-      const connectedContract = new Client.Client({
-        networkPassphrase: network.passphrase,
-        contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
-        rpcUrl: network.rpcUrl,
-        publicKey: address,
-        allowHttp: true,
-      });
+      console.log("Loading contract state...");
 
-      const newPrices: {[key in CurrencyPair]?: [number, number]} = {};
-      
-      for (const pair of Object.values(CurrencyPair)) {
-        try {
-          const contractPair = { tag: pair, values: undefined };
-          const assembledTx = await connectedContract.get_pair_prices({ pair: contractPair });
-          const prices = assembledTx.result;
-          if (prices.isOk()) {
-            newPrices[pair] = [Number(prices.unwrap()[0]), Number(prices.unwrap()[1])];
+      // Get current round - handle both success and error cases
+      try {
+        const currentRoundTx = await contract.get_current_round();
+        const simResult = await currentRoundTx.simulate();
+        
+        console.log("currentRoundTx Simulation result:", simResult.result);
+        console.log("simResult.result type:", typeof simResult.result);
+        console.log("simResult.result keys:", simResult.result ? Object.keys(simResult.result) : "null");
+        
+        // Handle the Result wrapper (Ok/Err structure)
+        let round: any = null;
+        if (simResult.result && typeof simResult.result === 'object') {
+          // Check if it's wrapped in an Ok result
+          if ('value' in simResult.result) {
+            console.log("Found value property, extracting...");
+            round = simResult.result.value;
+          } else {
+            // Direct result
+            console.log("Using direct result...");
+            round = simResult.result;
           }
-        } catch (err) {
-          console.error(`Error loading prices for ${pair}:`, err);
         }
+        
+        console.log("Parsed round data:", round);
+        console.log("round type:", typeof round);
+        console.log("round keys:", round ? Object.keys(round) : "null");
+        console.log("round.round_number:", round?.round_number);
+        console.log("round.round_number type:", typeof round?.round_number);
+        console.log("round.round_number !== undefined:", round?.round_number !== undefined);
+        
+        if (round && round.round_number !== undefined) {
+          console.log("Found current round:", round);
+          
+          const currentTime = Math.floor(Date.now() / 1000);
+          const timeRemaining = Math.max(0, (Number(round.start_time) + 300) - currentTime);
+          const isActive = !round.is_settled && timeRemaining > 0;
+
+          // Handle winning_prediction
+          let winningPrediction: Prediction | undefined;
+          if (round.winning_prediction) {
+            if (typeof round.winning_prediction === 'object' && 'tag' in round.winning_prediction) {
+              winningPrediction = round.winning_prediction.tag as Prediction;
+            } else if (typeof round.winning_prediction === 'string') {
+              winningPrediction = round.winning_prediction as Prediction;
+            }
+          }
+
+          setCurrentRound({
+            roundNumber: Number(round.round_number),
+            startTime: Number(round.start_time),
+            startPrice: Number(round.start_price),
+            endPrice: round.end_price ? Number(round.end_price) : undefined,
+            isSettled: round.is_settled,
+            winningPrediction,
+            totalPool: Number(round.total_pool),
+            upPool: Number(round.up_pool),
+            downPool: Number(round.down_pool),
+            stablePool: Number(round.stable_pool),
+            timeRemaining,
+            isActive,
+          });
+
+          // Check if user has a bet in current round
+          const userBets = round.bets?.filter((bet: any) => bet.user === address) || [];
+          if (userBets.length > 0) {
+            const bet = userBets[0];
+            
+            // Handle prediction type conversion
+            let predictionValue: Prediction;
+            if (bet.prediction && typeof bet.prediction === 'object' && 'tag' in bet.prediction) {
+              predictionValue = bet.prediction.tag as Prediction;
+            } else {
+              predictionValue = bet.prediction as unknown as Prediction;
+            }
+            
+            setUserBet({
+              prediction: predictionValue,
+              amount: bet.amount.toString(),
+              roundNumber: Number(round.round_number),
+            });
+          } else {
+            setUserBet(null);
+          }
+        } else {
+          console.log("No current round (contract returned error or empty result)");
+          setCurrentRound(null);
+          setUserBet(null);
+        }
+      } catch (err) {
+        console.log("No current round available (simulation failed):", err);
+        setCurrentRound(null);
+        setUserBet(null);
       }
-      
-      setCurrentPrices(newPrices);
+
+      // Get user winnings - use simple approach
+      try {
+        const winningsTx = await contract.get_user_winnings({ user: address! });
+        const simResult = await winningsTx.simulate();
+        setUserWinnings(Number(simResult.result || 0));
+      } catch (err) {
+        console.log("Could not fetch user winnings:", err);
+        setUserWinnings(0);
+      }
+
+      // Skip other calls for now to focus on the main issue
+      console.log("State loading completed");
+
     } catch (err) {
-      console.error("Error loading prices:", err);
+      console.error("Error loading state:", err);
     }
   };
 
   // Update countdown timer
   useEffect(() => {
-    if (currentBattle && currentBattle.isActive && currentBattle.timeRemaining && currentBattle.timeRemaining > 0) {
+    if (currentRound && currentRound.isActive && currentRound.timeRemaining && currentRound.timeRemaining > 0) {
       const timer = setInterval(() => {
-        setCurrentBattle(prev => {
+        setCurrentRound(prev => {
           if (!prev || !prev.timeRemaining) return prev;
           const newTimeRemaining = prev.timeRemaining - 1;
           if (newTimeRemaining <= 0) {
-            loadBattleState(); // Reload to check if battle can be settled
+            loadState(); // Reload to check if round can be settled
             return { ...prev, timeRemaining: 0, isActive: false };
           }
           return { ...prev, timeRemaining: newTimeRemaining };
@@ -235,31 +273,25 @@ export const CurrencyBattle: React.FC = () => {
 
       return () => clearInterval(timer);
     }
-  }, [currentBattle]);
+  }, [currentRound]);
 
-  const handleStartBattle = () => {
-    if (!address || !signTransaction || !selectedPair) {
-      setError("Please connect wallet and select a pair");
+  const handlePlaceBet = () => {
+    if (!address || !signTransaction || !selectedPrediction || !betAmount) {
+      setError("Please select prediction and enter bet amount");
       return;
     }
 
     setIsLoading(true);
     setError(null);
 
-    const connectedContract = new Client.Client({
-      networkPassphrase: network.passphrase,
-      contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
-      rpcUrl: network.rpcUrl,
-      publicKey: address,
-      allowHttp: true,
-    });
+    const contract = getContract();
+    if (!contract) return;
 
-    void connectedContract
-      .start_battle(
+    void contract
+      .place_bet(
         {
           user: address,
-          pair: { tag: selectedPair, values: undefined },
-          chosen_currency: chosenCurrency,
+          prediction: { tag: selectedPrediction, values: undefined },
           amount: BigInt(betAmount),
         },
         {
@@ -275,84 +307,46 @@ export const CurrencyBattle: React.FC = () => {
         });
       })
       .catch((err) => {
-        console.error("Start battle failed:", err);
-        setError("Failed to start battle");
+        console.error("Place bet failed:", err);
+        setError("Failed to place bet");
         setIsLoading(false);
       });
   };
 
-  const handleSettleBattle = () => {
-    if (!address || !signTransaction || !currentBattle) {
-      setError("No active battle to settle");
+  const handleClaimWinnings = () => {
+    if (!address || !signTransaction) {
+      setError("Please connect wallet");
       return;
     }
 
     setIsLoading(true);
     setError(null);
 
-    const connectedContract = new Client.Client({
-      networkPassphrase: network.passphrase,
-      contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
-      rpcUrl: network.rpcUrl,
-      publicKey: address,
-      allowHttp: true,
-    });
+    const contract = getContract();
+    if (!contract) return;
 
-    void connectedContract
-      .settle_battle(
+    void contract
+      .claim_winnings(
         {
           user: address,
-          pair: { tag: currentBattle.pair, values: undefined },
         },
         {
           simulate: true,
         },
       )
-      .then((result) => {
-        // Simulate battle result for demo (in real implementation, this would come from the contract)
-        const won = Math.random() > 0.5; // 50% chance to win for demo
-        const chosenCurrencyData = currentBattle.chosenCurrency === 0 
-          ? currencyPairData[currentBattle.pair].currency1
-          : currencyPairData[currentBattle.pair].currency2;
-        
-        if (won) {
-          const winnings = (parseFloat(currentBattle.amount) * 1.8).toString();
-          setBattleResult({
-            winner: chosenCurrencyData.symbol,
-            amount: winnings,
-          });
-          setShowVictory(true);
-        } else {
-          const opponentCurrency = currentBattle.chosenCurrency === 0 
-            ? currencyPairData[currentBattle.pair].currency2
-            : currencyPairData[currentBattle.pair].currency1;
-          setBattleResult({
-            winner: opponentCurrency.symbol,
-            amount: "0",
-          });
-          setShowDefeat(true);
-        }
-
+      .then((tx) => {
         prepareTx({
           rpcUrl: network.rpcUrl,
-          transactionXdr: result.toXDR(),
+          transactionXdr: tx.toXDR(),
           networkPassphrase: network.passphrase,
           headers: getNetworkHeaders(network, "rpc"),
         });
       })
       .catch((err) => {
-        console.error("Settle battle failed:", err);
-        setError("Failed to settle battle");
+        console.error("Claim winnings failed:", err);
+        setError("Failed to claim winnings");
         setIsLoading(false);
       });
-  };
-
-  const handleAnimationComplete = () => {
-    setShowVictory(false);
-    setShowDefeat(false);
-    setBattleResult(null);
-    setCurrentBattle(null);
-    setSelectedPair(null);
   };
 
   const formatTime = (seconds: number) => {
@@ -362,42 +356,24 @@ export const CurrencyBattle: React.FC = () => {
   };
 
   const formatPrice = (price: number) => {
-    return `$${(price / 100000000000000).toFixed(6)}`;
+    return `$${(price / 1000000000000).toFixed(6)}`;
   };
 
-  const loadPriceHistory = async () => {
-    if (!address) return;
-    
-    try {
-      const connectedContract = new Client.Client({
-        networkPassphrase: network.passphrase,
-        contractId: "CC26NFIAZQEXW3KHUXGGK2PUMQ4JRUSQD4NLVBTWBRTYYAATZ4PDDVFC",
-        rpcUrl: network.rpcUrl,
-        publicKey: address,
-        allowHttp: true,
-      });
+  const getPredictionColor = (prediction: Prediction) => {
+    switch (prediction) {
+      case Prediction.Up: return "#28a745";
+      case Prediction.Down: return "#dc3545";  
+      case Prediction.Stable: return "#ffc107";
+      default: return "#6c757d";
+    }
+  };
 
-      const newHistory: {[key in CurrencyPair]?: number[]} = {};
-      
-      for (const pair of Object.values(CurrencyPair)) {
-        try {
-          // Get ticker symbol for the first currency in the pair
-          const ticker = pair === CurrencyPair.ArsChf ? "ARS" : 
-                        pair === CurrencyPair.BrlEur ? "BRL" : "MXN";
-          
-          const assembledTx = await connectedContract.fetch_last_five_prices({ ticker });
-          const prices = assembledTx.result;
-          if (prices.isOk()) {
-            newHistory[pair] = prices.unwrap().map(p => Number(p));
-          }
-        } catch (err) {
-          console.error(`Error loading price history for ${pair}:`, err);
-        }
-      }
-      
-      setPriceHistory(newHistory);
-    } catch (err) {
-      console.error("Error loading price history:", err);
+  const getPredictionIcon = (prediction: Prediction) => {
+    switch (prediction) {
+      case Prediction.Up: return "📈";
+      case Prediction.Down: return "📉";
+      case Prediction.Stable: return "➡️";
+      default: return "❓";
     }
   };
 
@@ -405,31 +381,19 @@ export const CurrencyBattle: React.FC = () => {
     return (
       <div style={{ textAlign: "center", padding: "2rem" }}>
         <h2>🏟️ Currency Clash Arena</h2>
-        <p>Connect your wallet to start battling currencies!</p>
+        <p>Connect your wallet to start predicting ARS price movements!</p>
       </div>
     );
   }
 
   return (
     <div style={{ padding: "2rem", maxWidth: "1200px", margin: "0 auto" }}>
-      <style>
-        {`
-          input[type="number"]::-webkit-outer-spin-button,
-          input[type="number"]::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-          }
-          input[type="number"] {
-            -moz-appearance: textfield;
-          }
-        `}
-      </style>
       <div style={{ textAlign: "center", marginBottom: "2rem" }}>
         <h1 style={{ fontSize: "2.5rem", margin: "0 0 0.5rem 0" }}>
-          🏟️ Currency Clash Arena
+          🏟️ ARS Price Arena
         </h1>
         <p style={{ fontSize: "1.2rem", color: "#666", margin: 0 }}>
-          Choose your champion currency and battle for 5 minutes!
+          Predict if ARS will rise, fall, or stay stable over 5 minutes!
         </p>
       </div>
 
@@ -448,666 +412,307 @@ export const CurrencyBattle: React.FC = () => {
         </div>
       )}
 
-      {currentBattle ? (
-        <div
-          style={{
-            border: "2px solid " + currencyPairData[currentBattle.pair].color,
-            borderRadius: "1rem",
-            padding: "2rem",
-            backgroundColor: "#f8f9fa",
-            textAlign: "center",
-          }}
-        >
-          <h2 style={{ margin: "0 0 1rem 0", color: currencyPairData[currentBattle.pair].color }}>
-            ⚔️ Battle in Progress!
-          </h2>
-          
-          {/* <div style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>
-            {currencyPairData[currentBattle.pair].name}
-          </div> */}
-          
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: "2rem",
-              marginBottom: "2rem",
-            }}
-          >
-            <div
+      {/* User Stats */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        gap: "1rem",
+        marginBottom: "2rem",
+      }}>
+        <div style={{
+          backgroundColor: "white",
+          padding: "1rem",
+          borderRadius: "0.5rem",
+          border: "1px solid #ddd",
+          textAlign: "center",
+        }}>
+          <h4 style={{ margin: "0 0 0.5rem 0", color: "#333" }}>💰 Claimable Winnings</h4>
+          <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: "bold", color: "#28a745" }}>
+            ${userWinnings}
+          </p>
+          {userWinnings > 0 && (
+            <button
+              onClick={handleClaimWinnings}
+              disabled={isLoading || isPrepareTxPending || isSubmitRpcPending}
               style={{
-                padding: "1rem",
-                borderRadius: "0.5rem",
-                backgroundColor: currentBattle.chosenCurrency === 0 ? currencyPairData[currentBattle.pair].color : "#e9ecef",
-                color: currentBattle.chosenCurrency === 0 ? "white" : "black",
+                marginTop: "0.5rem",
+                padding: "0.5rem 1rem",
+                borderRadius: "0.25rem",
+                border: "none",
+                backgroundColor: "#28a745",
+                color: "white",
+                cursor: "pointer",
+                fontWeight: "bold",
               }}
             >
-              {currencyPairData[currentBattle.pair].currency1.flag} {currencyPairData[currentBattle.pair].currency1.symbol}
-            </div>
-            
-            <div style={{ fontSize: "2rem" }}>VS</div>
-            
-            <div
-              style={{
-                padding: "1rem",
-                borderRadius: "0.5rem",
-                backgroundColor: currentBattle.chosenCurrency === 1 ? currencyPairData[currentBattle.pair].color : "#e9ecef",
-                color: currentBattle.chosenCurrency === 1 ? "white" : "black",
-              }}
-            >
-              {currencyPairData[currentBattle.pair].currency2.flag} {currencyPairData[currentBattle.pair].currency2.symbol}
-            </div>
-          </div>
-          
-          <div style={{ fontSize: "1.2rem", marginBottom: "1rem" }}>
-            Your bet: {currentBattle.amount} tokens
-          </div>
-
-          {/* Price History Table */}
-          {priceHistory[currentBattle.pair] && (
-            <div style={{
-              backgroundColor: "white",
-              borderRadius: "0.5rem",
-              padding: "1rem",
-              marginBottom: "1rem",
-              border: "1px solid #ddd"
-            }}>
-              <h4 style={{ margin: "0 0 1rem 0", color: currencyPairData[currentBattle.pair].color }}>
-                📈 Historial de Precios (Últimos 5 precios)
-              </h4>
-              <table style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "0.9rem"
-              }}>
-                <thead>
-                  <tr style={{ backgroundColor: "#f8f9fa" }}>
-                    <th style={{ 
-                      padding: "0.5rem", 
-                      border: "1px solid #dee2e6", 
-                      textAlign: "center",
-                      fontWeight: "bold",
-                      color: currencyPairData[currentBattle.pair].color
-                    }}>
-                      Orden
-                    </th>
-                    <th style={{ 
-                      padding: "0.5rem", 
-                      border: "1px solid #dee2e6", 
-                      textAlign: "center",
-                      fontWeight: "bold",
-                      color: currencyPairData[currentBattle.pair].color
-                    }}>
-                      {currencyPairData[currentBattle.pair].currency1.symbol} Precio
-                    </th>
-                    <th style={{ 
-                      padding: "0.5rem", 
-                      border: "1px solid #dee2e6", 
-                      textAlign: "center",
-                      fontWeight: "bold",
-                      color: currencyPairData[currentBattle.pair].color
-                    }}>
-                      Tendencia
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {priceHistory[currentBattle.pair]!.map((price, index) => {
-                    const prevPrice = index > 0 ? priceHistory[currentBattle.pair]![index - 1] : price;
-                    const isUp = price > prevPrice;
-                    const isDown = price < prevPrice;
-                    
-                    return (
-                      <tr key={index} style={{ 
-                        backgroundColor: index % 2 === 0 ? "#f8f9fa" : "white" 
-                      }}>
-                        <td style={{ 
-                          padding: "0.5rem", 
-                          border: "1px solid #dee2e6", 
-                          textAlign: "center",
-                          fontWeight: "bold"
-                        }}>
-                          #{index + 1}
-                        </td>
-                        <td style={{ 
-                          padding: "0.5rem", 
-                          border: "1px solid #dee2e6", 
-                          textAlign: "center",
-                          fontFamily: "monospace"
-                        }}>
-                          {formatPrice(price)}
-                        </td>
-                        <td style={{ 
-                          padding: "0.5rem", 
-                          border: "1px solid #dee2e6", 
-                          textAlign: "center",
-                          fontSize: "1.2rem"
-                        }}>
-                          {isUp ? "📈" : isDown ? "📉" : "➡️"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-          
-          {currentBattle.isActive && currentBattle.timeRemaining && currentBattle.timeRemaining > 0 ? (
-            <BattleProgress
-              timeRemaining={currentBattle.timeRemaining}
-              totalTime={300}
-              currency1={currencyPairData[currentBattle.pair].currency1}
-              currency2={currencyPairData[currentBattle.pair].currency2}
-              chosenCurrency={currentBattle.chosenCurrency}
-              pairColor={currencyPairData[currentBattle.pair].color}
-            />
-          ) : (
-            <div>
-              <div style={{ fontSize: "2rem", marginBottom: "1rem", color: "green" }}>
-                ⏰ Battle Complete!
-              </div>
-              
-              {/* Show battle results with current prices to determine winner */}
-              {currentPrices[currentBattle.pair] && (
-                <div style={{
-                  backgroundColor: "white",
-                  borderRadius: "0.5rem",
-                  padding: "1rem",
-                  marginBottom: "1rem",
-                  border: "1px solid #ddd"
-                }}>
-                  <h4 style={{ margin: "0 0 0.5rem 0", color: currencyPairData[currentBattle.pair].color }}>
-                    🏆 Battle Results
-                  </h4>
-                  <div style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>
-                    <div>Current {currencyPairData[currentBattle.pair].currency1.symbol} price: {formatPrice(currentPrices[currentBattle.pair]![0])}</div>
-                    <div>Current {currencyPairData[currentBattle.pair].currency2.symbol} price: {formatPrice(currentPrices[currentBattle.pair]![1])}</div>
-                  </div>
-                  <div style={{ 
-                    fontSize: "1.1rem", 
-                    fontWeight: "bold",
-                    color: currencyPairData[currentBattle.pair].color,
-                    marginTop: "0.5rem"
-                  }}>
-                    Your choice: {currentBattle.chosenCurrency === 0 
-                      ? `${currencyPairData[currentBattle.pair].currency1.flag} ${currencyPairData[currentBattle.pair].currency1.symbol}`
-                      : `${currencyPairData[currentBattle.pair].currency2.flag} ${currencyPairData[currentBattle.pair].currency2.symbol}`
-                    }
-                  </div>
-                </div>
-              )}
-              
-              <Button
-                size="lg"
-                variant="primary"
-                onClick={handleSettleBattle}
-                disabled={isLoading || isPrepareTxPending || isSubmitRpcPending}
-                style={{
-                  backgroundColor: "green",
-                  borderColor: "green",
-                  fontSize: "1.2rem",
-                  padding: "1rem 2rem",
-                }}
-              >
-                {isLoading || isPrepareTxPending || isSubmitRpcPending
-                  ? "Settling..."
-                  : "🏆 Settle Battle"}
-              </Button>
-            </div>
+              Claim Now
+            </button>
           )}
         </div>
-      ) : (
-        <>
-          {!selectedPair ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: "1.5rem",
-                marginBottom: "2rem",
-              }}
-            >
-              {Object.entries(currencyPairData).map(([pair, data]) => (
-                <div
-                  key={pair}
-                  onClick={() => setSelectedPair(pair as CurrencyPair)}
+
+        <div style={{
+          backgroundColor: "white",
+          padding: "1rem",
+          borderRadius: "0.5rem",
+          border: "1px solid #ddd",
+          textAlign: "center",
+        }}>
+          <h4 style={{ margin: "0 0 0.5rem 0", color: "#333" }}>📊 Current ARS Price</h4>
+          <p style={{ margin: 0, fontSize: "1.2rem", fontWeight: "bold", color: "#007bff" }}>
+            {currentPrice ? formatPrice(currentPrice) : "Loading..."}
+          </p>
+        </div>
+
+        <div style={{
+          backgroundColor: "white",
+          padding: "1rem",
+          borderRadius: "0.5rem",
+          border: "1px solid #ddd",
+          textAlign: "center",
+        }}>
+          <h4 style={{ margin: "0 0 0.5rem 0", color: "#333" }}>🏁 Completed Rounds</h4>
+          <p style={{ margin: 0, fontSize: "1.5rem", fontWeight: "bold", color: "#6c757d" }}>
+            {completedRounds.length}
+          </p>
+        </div>
+      </div>
+
+      {/* Main Content - Side by Side Layout */}
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "1fr 1fr", 
+        gap: "2rem", 
+        marginBottom: "2rem" 
+      }}>
+        {/* Left Side - Betting Form - Always visible */}
+        <div style={{
+          backgroundColor: "white",
+          padding: "2rem",
+          borderRadius: "1rem",
+          border: "2px solid #28a745",
+        }}>
+          <h2 style={{ margin: "0 0 2rem 0", color: "#28a745", textAlign: "center" }}>
+            🎯 Place Your Prediction
+          </h2>
+
+          {/* Prediction Selection */}
+          <div style={{ marginBottom: "2rem" }}>
+            <h4 style={{ margin: "0 0 1rem 0", color: "#333" }}>Predict ARS Price Movement</h4>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
+              {Object.values(Prediction).map(prediction => (
+                <button
+                  key={prediction}
+                  onClick={() => setSelectedPrediction(prediction)}
                   style={{
-                    border: "2px solid " + data.color,
+                    padding: "1rem",
                     borderRadius: "0.75rem",
-                    padding: "1.5rem",
+                    border: "2px solid",
+                    borderColor: selectedPrediction === prediction ? getPredictionColor(prediction) : "#ddd",
+                    backgroundColor: selectedPrediction === prediction ? getPredictionColor(prediction) : "white",
+                    color: selectedPrediction === prediction ? "white" : "#333",
                     cursor: "pointer",
                     textAlign: "center",
-                    backgroundColor: "white",
+                    fontSize: "0.9rem",
+                    fontWeight: "bold",
                     transition: "all 0.2s",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.transform = "translateY(-4px)";
-                    e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.2)";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.1)";
                   }}
                 >
-                  <h3 style={{ margin: "0 0 0.75rem 0", color: data.color, fontSize: "1.3rem" }}>
-                    {data.name}
-                  </h3>
-                  <p style={{ margin: "0 0 1rem 0", color: "#666", fontSize: "0.9rem" }}>
-                    {data.description}
-                  </p>
-                  
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      marginBottom: "0.75rem",
-                    }}
-                  >
-                    <div style={{ fontSize: "1.6rem" }}>
-                      {data.currency1.flag} {data.currency1.symbol}
-                    </div>
-                    <div style={{ fontSize: "1.2rem", color: data.color }}>VS</div>
-                    <div style={{ fontSize: "1.6rem" }}>
-                      {data.currency2.flag} {data.currency2.symbol}
-                    </div>
+                  <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>
+                    {getPredictionIcon(prediction)}
                   </div>
-                  
-                  {currentPrices[pair as CurrencyPair] && (
-                    <div style={{ fontSize: "0.8rem", color: "#666" }}>
-                      Current prices: {formatPrice(currentPrices[pair as CurrencyPair]![0])} | {formatPrice(currentPrices[pair as CurrencyPair]![1])}
-                    </div>
-                  )}
-                </div>
+                  <div>{prediction}</div>
+                  <div style={{ fontSize: "0.7rem", marginTop: "0.25rem", opacity: 0.8 }}>
+                    {prediction === Prediction.Up && "> +0.05%"}
+                    {prediction === Prediction.Down && "< -0.05%"}
+                    {prediction === Prediction.Stable && "-0.05% to +0.05%"}
+                  </div>
+                </button>
               ))}
             </div>
-          ) : (
-            <div style={{ display: "flex", gap: "2rem", alignItems: "flex-start" }}>
-              {/* Left Column - Battle Setup */}
-              <div
+          </div>
+
+          {/* Amount Input */}
+          <div style={{ marginBottom: "2rem" }}>
+            <h4 style={{ margin: "0 0 1rem 0", color: "#333" }}>Bet Amount</h4>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
+              <input
+                type="number"
+                value={betAmount}
+                onChange={(e) => setBetAmount(e.target.value)}
+                placeholder="Enter amount"
                 style={{
-                  border: "2px solid " + currencyPairData[selectedPair].color,
-                  borderRadius: "1rem",
-                  padding: "2rem",
-                  backgroundColor: "white",
-                  flex: "1",
-                  minWidth: "500px",
-                  position: "relative",
+                  flex: 1,
+                  padding: "0.75rem",
+                  fontSize: "1rem",
+                  border: "2px solid #ddd",
+                  borderRadius: "0.5rem",
+                  outline: "none",
+                }}
+              />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem" }}>
+              {[1, 10, 50, 100].map(amount => (
+                <button
+                  key={amount}
+                  onClick={() => setBetAmount(amount.toString())}
+                  style={{
+                    padding: "0.5rem",
+                    border: "1px solid #6c757d",
+                    borderRadius: "0.25rem",
+                    backgroundColor: "white",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  ${amount}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Place Bet Button */}
+          <button
+            onClick={handlePlaceBet}
+            disabled={
+              isLoading ||
+              isPrepareTxPending ||
+              isSubmitRpcPending ||
+              !selectedPrediction ||
+              !betAmount ||
+              Number(betAmount) <= 0
+            }
+            style={{
+              width: "100%",
+              padding: "1rem 2rem",
+              borderRadius: "0.75rem",
+              border: "none",
+              fontSize: "1.2rem",
+              fontWeight: "bold",
+              cursor: "pointer",
+              backgroundColor: "#28a745",
+              color: "white",
+              opacity: (isLoading || isPrepareTxPending || isSubmitRpcPending || !selectedPrediction || !betAmount || Number(betAmount) <= 0) ? 0.6 : 1,
+            }}
+          >
+            {isLoading || isPrepareTxPending || isSubmitRpcPending
+              ? "Placing Bet..."
+              : "🎯 Place Bet"}
+          </button>
+        </div>
+
+        {/* Right Side - Current Round */}
+        {currentRound && (
+          <div style={{
+            backgroundColor: "white",
+            padding: "2rem",
+            borderRadius: "1rem",
+            border: "2px solid #007bff",
+          }}>
+            <h2 style={{ margin: "0 0 1rem 0", color: "#007bff", textAlign: "center" }}>
+              🎯 Round #{currentRound.roundNumber}
+            </h2>
+
+            {/* Timer */}
+            {currentRound.isActive && currentRound.timeRemaining !== undefined && (
+              <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+                <div style={{ fontSize: "1.8rem", fontWeight: "bold", color: "#dc3545" }}>
+                  ⏰ {formatTime(currentRound.timeRemaining)}
+                </div>
+                <div style={{ fontSize: "0.9rem", color: "#666" }}>
+                  Time remaining to settle
+                </div>
+              </div>
+            )}
+
+            {/* Round Info */}
+            <div style={{ marginBottom: "1.5rem" }}>
+              <h4 style={{ margin: "0 0 0.75rem 0", color: "#333" }}>Round Details</h4>
+              <div style={{ fontSize: "0.85rem", lineHeight: "1.4" }}>
+                <div><strong>Start Price:</strong> {formatPrice(currentRound.startPrice)}</div>
+                {currentRound.endPrice && (
+                  <div><strong>End Price:</strong> {formatPrice(currentRound.endPrice)}</div>
+                )}
+                <div><strong>Total Pool:</strong> ${currentRound.totalPool}</div>
+                <div><strong>Status:</strong> {currentRound.isSettled ? "🏁 Settled" : currentRound.isActive ? "⏳ Active" : "⏰ Ready to Settle"}</div>
+                {currentRound.winningPrediction && (
+                  <div style={{ color: getPredictionColor(currentRound.winningPrediction) }}>
+                    <strong>Winner:</strong> {getPredictionIcon(currentRound.winningPrediction)} {currentRound.winningPrediction}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Pool Breakdown */}
+            <div style={{ marginBottom: "1.5rem" }}>
+              <h4 style={{ margin: "0 0 0.75rem 0", color: "#333" }}>Pool Distribution</h4>
+              <div style={{ fontSize: "0.85rem", lineHeight: "1.4" }}>
+                <div style={{ color: getPredictionColor(Prediction.Up) }}>
+                  📈 <strong>Up Pool:</strong> ${currentRound.upPool}
+                </div>
+                <div style={{ color: getPredictionColor(Prediction.Down) }}>
+                  📉 <strong>Down Pool:</strong> ${currentRound.downPool}
+                </div>
+                <div style={{ color: getPredictionColor(Prediction.Stable) }}>
+                  ➡️ <strong>Stable Pool:</strong> ${currentRound.stablePool}
+                </div>
+              </div>
+            </div>
+
+            {/* User's Bet */}
+            {userBet && userBet.roundNumber === currentRound.roundNumber && (
+              <div style={{
+                backgroundColor: "#e8f4f8",
+                padding: "1rem",
+                borderRadius: "0.5rem",
+                textAlign: "center",
+                border: "1px solid #007bff",
+              }}>
+                <h4 style={{ margin: "0 0 0.5rem 0", color: "#007bff" }}>Your Bet</h4>
+                <div style={{ fontSize: "1rem" }}>
+                  <span style={{ color: getPredictionColor(userBet.prediction) }}>
+                    {getPredictionIcon(userBet.prediction)} {userBet.prediction}
+                  </span>
+                  {" - "}
+                  <strong>${userBet.amount}</strong>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Price History */}
+      {priceHistory.length > 0 && (
+        <div style={{
+          backgroundColor: "white",
+          padding: "1.5rem",
+          borderRadius: "0.5rem",
+          border: "1px solid #ddd",
+        }}>
+          <h4 style={{ margin: "0 0 1rem 0", color: "#333" }}>📈 Recent ARS Price History</h4>
+          <div style={{ display: "flex", gap: "1rem", overflowX: "auto" }}>
+            {priceHistory.map((price, index) => (
+              <div
+                key={index}
+                style={{
+                  minWidth: "120px",
+                  padding: "0.75rem",
+                  backgroundColor: "#f8f9fa",
+                  borderRadius: "0.25rem",
+                  textAlign: "center",
+                  border: "1px solid #ddd",
                 }}
               >
-                {/* Back Button - Top Left Corner */}
-                {/* <button
-                  onClick={() => setSelectedPair(null)}
-                  disabled={isLoading || isPrepareTxPending || isSubmitRpcPending}
-                  style={{
-                    position: "absolute",
-                    top: "1rem",
-                    left: "1rem",
-                    padding: "0.5rem 1rem",
-                    borderRadius: "0.5rem",
-                    border: "1px solid #6c757d",
-                    fontSize: "0.85rem",
-                    fontWeight: "normal",
-                    cursor: "pointer",
-                    backgroundColor: "white",
-                    color: "#6c757d",
-                    transition: "all 0.2s",
-                    zIndex: 1
-                  }}
-                  onMouseOver={(e) => {
-                    if (!e.currentTarget.disabled) {
-                      e.currentTarget.style.backgroundColor = "#f8f9fa";
-                      e.currentTarget.style.borderColor = "#495057";
-                      e.currentTarget.style.color = "#495057";
-                    }
-                  }}
-                  onMouseOut={(e) => {
-                    if (!e.currentTarget.disabled) {
-                      e.currentTarget.style.backgroundColor = "white";
-                      e.currentTarget.style.borderColor = "#6c757d";
-                      e.currentTarget.style.color = "#6c757d";
-                    }
-                  }}
-                >
-                  ← Back
-                </button> */}
-
-                <div style={{ textAlign: "center", marginBottom: "2rem", marginTop: "1rem" }}>
-                  {/* <h2 style={{ margin: "0 0 1rem 0", color: currencyPairData[selectedPair].color }}>
-                    {currencyPairData[selectedPair].name}
-                  </h2> */}
-                  {/* <p style={{ margin: 0, color: "#666" }}>
-                    {currencyPairData[selectedPair].description}
-                  </p> */}
+                <div style={{ fontSize: "0.8rem", color: "#666", marginBottom: "0.25rem" }}>
+                  #{index + 1}
                 </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "1rem",
-                    marginBottom: "2rem",
-                    justifyContent: "center",
-                  }}
-                >
-                  <div
-                    onClick={() => setChosenCurrency(0)}
-                    style={{
-                      padding: "1.5rem",
-                      borderRadius: "1rem",
-                      border: "2px solid",
-                      borderColor: chosenCurrency === 0 ? currencyPairData[selectedPair].color : "#ddd",
-                      backgroundColor: chosenCurrency === 0 ? currencyPairData[selectedPair].color : "white",
-                      color: chosenCurrency === 0 ? "white" : "black",
-                      cursor: "pointer",
-                      textAlign: "center",
-                      flex: 1,
-                    }}
-                  >
-                    <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
-                      {currencyPairData[selectedPair].currency1.flag}
-                    </div>
-                    <div style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-                      {currencyPairData[selectedPair].currency1.symbol}
-                    </div>
-                    <div style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
-                      {currencyPairData[selectedPair].currency1.name}
-                    </div>
-                  </div>
-
-                  <div
-                    onClick={() => setChosenCurrency(1)}
-                    style={{
-                      padding: "1.5rem",
-                      borderRadius: "1rem",
-                      border: "2px solid",
-                      borderColor: chosenCurrency === 1 ? currencyPairData[selectedPair].color : "#ddd",
-                      backgroundColor: chosenCurrency === 1 ? currencyPairData[selectedPair].color : "white",
-                      color: chosenCurrency === 1 ? "white" : "black",
-                      cursor: "pointer",
-                      textAlign: "center",
-                      flex: 1,
-                    }}
-                  >
-                    <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
-                      {currencyPairData[selectedPair].currency2.flag}
-                    </div>
-                    <div style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-                      {currencyPairData[selectedPair].currency2.symbol}
-                    </div>
-                    <div style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
-                      {currencyPairData[selectedPair].currency2.name}
-                    </div>
-                  </div>
+                <div style={{ fontWeight: "bold", fontFamily: "monospace" }}>
+                  {formatPrice(price)}
                 </div>
-
-                {/* Amount Section */}
-                <div style={{ marginBottom: "2rem" }}>
-                  <div style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "1rem"
-                  }}>
-                    <h4 style={{ 
-                      margin: 0, 
-                      fontSize: "1.2rem", 
-                      color: "#333" 
-                    }}>
-                      Amount
-                    </h4>
-                    <input
-                      type="number"
-                      value={betAmount}
-                      onChange={(e) => setBetAmount(e.target.value)}
-                      min="0"
-                      autoFocus
-                      style={{
-                        fontSize: "2rem",
-                        fontWeight: "bold",
-                        color: "#333",
-                        backgroundColor: "transparent",
-                        border: "none",
-                        outline: "none",
-                        textAlign: "right",
-                        width: "auto",
-                        maxWidth: "200px",
-                        MozAppearance: "textfield",
-                        WebkitAppearance: "none",
-                        appearance: "none"
-                      }}
-                      placeholder="0"
-                    />
-                  </div>
-                  
-                  {/* Preset Amount Buttons */}
-                  <div style={{ 
-                    display: "flex", 
-                    gap: "0.5rem", 
-                    justifyContent: "center" 
-                  }}>
-                    {[1, 20, 100].map((amount) => (
-                      <button
-                        key={amount}
-                        onClick={() => {
-                          const currentAmount = Number(betAmount) || 0;
-                          setBetAmount((currentAmount + amount).toString());
-                        }}
-                        style={{
-                          padding: "0.75rem 1.5rem",
-                          borderRadius: "0.5rem",
-                          border: "none",
-                          fontSize: "1rem",
-                          fontWeight: "bold",
-                          cursor: "pointer",
-                          backgroundColor: "#495057",
-                          color: "white",
-                          transition: "all 0.2s"
-                        }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.backgroundColor = "#6c757d";
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.backgroundColor = "#495057";
-                        }}
-                      >
-                        +${amount}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Trade Button */}
-                <button
-                  onClick={handleStartBattle}
-                  disabled={
-                    isLoading ||
-                    isPrepareTxPending ||
-                    isSubmitRpcPending ||
-                    !betAmount ||
-                    Number(betAmount) <= 0 ||
-                    (chosenCurrency !== 0 && chosenCurrency !== 1)
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "1rem 2rem",
-                    borderRadius: "0.75rem",
-                    border: "none",
-                    fontSize: "1.3rem",
-                    fontWeight: "bold",
-                    cursor: isLoading || isPrepareTxPending || isSubmitRpcPending || 
-                           !betAmount || Number(betAmount) <= 0 || 
-                           (chosenCurrency !== 0 && chosenCurrency !== 1) ? "not-allowed" : "pointer",
-                    backgroundColor: isLoading || isPrepareTxPending || isSubmitRpcPending || 
-                                   !betAmount || Number(betAmount) <= 0 || 
-                                   (chosenCurrency !== 0 && chosenCurrency !== 1) ? "#6c757d" : "#007bff",
-                    color: "white",
-                    transition: "all 0.2s",
-                    opacity: isLoading || isPrepareTxPending || isSubmitRpcPending || 
-                             !betAmount || Number(betAmount) <= 0 || 
-                             (chosenCurrency !== 0 && chosenCurrency !== 1) ? 0.6 : 1
-                  }}
-                >
-                  {isLoading || isPrepareTxPending || isSubmitRpcPending
-                    ? "Starting Battle..."
-                    : "Trade"}
-                </button>
               </div>
-
-              {/* Right Column - Price History Table */}
-              {priceHistory[selectedPair] && currentPrices[selectedPair] && (
-                <div style={{
-                  backgroundColor: "#f8f9fa",
-                  borderRadius: "0.5rem",
-                  padding: "1.5rem",
-                  border: "1px solid #ddd",
-                  flex: "1",
-                  minWidth: "500px",
-                  maxWidth: "600px"
-                }}>
-                  <h4 style={{ margin: "0 0 1rem 0", color: currencyPairData[selectedPair].color, textAlign: "center" }}>
-                    📊 Historial de Precios y Competencia
-                  </h4>
-                  <table style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    fontSize: "0.9rem",
-                    backgroundColor: "white",
-                    borderRadius: "0.5rem",
-                    overflow: "hidden",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                  }}>
-                    <thead>
-                      <tr style={{ backgroundColor: currencyPairData[selectedPair].color, color: "white" }}>
-                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
-                          Período
-                        </th>
-                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
-                          {currencyPairData[selectedPair].currency1.flag} {currencyPairData[selectedPair].currency1.symbol}
-                        </th>
-                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
-                          {currencyPairData[selectedPair].currency2.flag} {currencyPairData[selectedPair].currency2.symbol}
-                        </th>
-                        <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
-                          Ganador
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {priceHistory[selectedPair]!.map((price1, index) => {
-                        // For demo purposes, generate price2 based on current price ratio
-                        // In real implementation, you would get actual historical data for currency2
-                        const currentRatio = currentPrices[selectedPair]![1] / currentPrices[selectedPair]![0];
-                        const price2 = price1 * currentRatio;
-                        
-                        const prevPrice1 = index > 0 ? priceHistory[selectedPair]![index - 1] : price1;
-                        const prevPrice2 = prevPrice1 * currentRatio;
-                        
-                        const change1 = price1 - prevPrice1;
-                        const change2 = price2 - prevPrice2;
-                        const percentChange1 = prevPrice1 !== 0 ? (change1 / prevPrice1) * 100 : 0;
-                        const percentChange2 = prevPrice2 !== 0 ? (change2 / prevPrice2) * 100 : 0;
-                        
-                        const winner = Math.abs(percentChange1) > Math.abs(percentChange2) ? 
-                          currencyPairData[selectedPair].currency1 : 
-                          currencyPairData[selectedPair].currency2;
-                        
-                        return (
-                          <tr key={index} style={{ 
-                            backgroundColor: index % 2 === 0 ? "#f8f9fa" : "white",
-                            borderBottom: "1px solid #dee2e6"
-                          }}>
-                            <td style={{ padding: "0.75rem", textAlign: "center", fontWeight: "bold" }}>
-                              #{index + 1}
-                            </td>
-                            <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                              <div style={{ fontFamily: "monospace", fontWeight: "bold" }}>
-                                {formatPrice(price1)}
-                              </div>
-                              <div style={{ 
-                                fontSize: "0.8rem", 
-                                color: change1 > 0 ? "green" : change1 < 0 ? "red" : "#666",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "0.25rem"
-                              }}>
-                                {change1 > 0 ? "📈" : change1 < 0 ? "📉" : "➡️"}
-                                {percentChange1.toFixed(2)}%
-                              </div>
-                            </td>
-                            <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                              <div style={{ fontFamily: "monospace", fontWeight: "bold" }}>
-                                {formatPrice(price2)}
-                              </div>
-                              <div style={{ 
-                                fontSize: "0.8rem", 
-                                color: change2 > 0 ? "green" : change2 < 0 ? "red" : "#666",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "0.25rem"
-                              }}>
-                                {change2 > 0 ? "📈" : change2 < 0 ? "📉" : "➡️"}
-                                {percentChange2.toFixed(2)}%
-                              </div>
-                            </td>
-                            <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                              <div style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "0.5rem",
-                                padding: "0.25rem 0.5rem",
-                                borderRadius: "1rem",
-                                backgroundColor: currencyPairData[selectedPair].color + "20",
-                                color: currencyPairData[selectedPair].color,
-                                fontWeight: "bold",
-                                fontSize: "0.9rem"
-                              }}>
-                                <span style={{ fontSize: "1.2rem" }}>🏆</span>
-                                {winner.flag} {winner.symbol}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <div style={{ 
-                    fontSize: "0.8rem", 
-                    color: "#666", 
-                    textAlign: "center", 
-                    marginTop: "1rem",
-                    fontStyle: "italic"
-                  }}>
-                    El ganador se determina por el mayor cambio porcentual absoluto en cada período
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Victory/Defeat Animations */}
-      {battleResult && (
-        <>
-          <VictoryAnimation
-            isVisible={showVictory}
-            winner={battleResult.winner}
-            amount={battleResult.amount}
-            onComplete={handleAnimationComplete}
-          />
-          <DefeatAnimation
-            isVisible={showDefeat}
-            winner={battleResult.winner}
-            onComplete={handleAnimationComplete}
-          />
-        </>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
