@@ -1,0 +1,1 @@
+import{C as r,r as e}from"./index-CFvKu_Dm.js";const a=new r({networkPassphrase:"Standalone Network ; February 2017",contractId:"CC2AJHUB5VJTCPDGOEHV4YDCHHVYY3AN2L5ZM3OI37W5ED72BV3RS7VP",rpcUrl:e,publicKey:void 0});export{a as default};

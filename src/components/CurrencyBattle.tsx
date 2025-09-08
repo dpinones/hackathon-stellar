@@ -41,11 +41,11 @@ export const CurrencyBattle: React.FC = () => {
   const [betAmount, setBetAmount] = useState<string>("");
   const [selectedPrediction, setSelectedPrediction] = useState<Prediction | null>(null);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
-  const [priceHistory, setPriceHistory] = useState<number[]>([]);
+  const [priceHistory] = useState<number[]>([]);
   const [userWinnings, setUserWinnings] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [completedRounds, setCompletedRounds] = useState<number[]>([]);
+  const [completedRounds] = useState<number[]>([]);
   
   const {
     mutate: prepareTx,
