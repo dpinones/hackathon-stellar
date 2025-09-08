@@ -1,19 +1,21 @@
-# Currency Clash Arena
+# Currency Clash Arena - ARS Lottery
 
-**A gamified decentralized betting platform built on Stellar blockchain, focused on cryptocurrency volatility prediction.**
+**A gamified decentralized betting platform built on Stellar blockchain, focused exclusively on Argentine Peso (ARS) volatility prediction.**
 
 ## 🎯 Overview
 
-Currency Clash Arena is a real-time betting application where users predict cryptocurrency price movements over 5-minute intervals. Players bet testnet tokens to forecast whether currencies will rise, fall, or remain stable, with outcomes validated by the Stelllar Reflector oracle system.
+Currency Clash Arena implements an ARS-focused lottery system where users predict Argentine Peso price movements against USD over 5-minute intervals. Players bet testnet tokens to forecast whether ARS will rise, fall, or remain stable, with outcomes validated by the Stellar Reflector oracle system.
+
+This creates an addictive and simple experience designed for hackathon environments, featuring rapid rounds and automatic resolution while eliminating the concept of "tickets" - users bet tokens directly for the desired amounts.
 
 ### Key Features
 
-- **Fast-paced rounds**: 5-minute betting windows with instant settlement
+- **ARS-only focus**: Exclusively tracks Argentine Peso volatility (the most volatile currency)
 - **Three prediction types**: Rise (>+0.05%), Fall (<-0.05%), or Stable (-0.05% to +0.05%)
-- **Multiple currency pairs**: ARS/CHF, BRL/EUR, MXN/XAU
-- **Oracle-powered**: Real-time price data from Stellar Reflector
-- **Proportional rewards**: Winners share the losing pool proportionally
-- **Autonomous operation**: Fully decentralized with automatic settlement
+- **5-minute rounds**: Fast betting windows with automatic settlement
+- **Oracle-powered**: Real-time ARS/USD price data from Stellar Reflector
+- **Proportional rewards**: Winners share the losing pools proportionally
+- **Fully autonomous**: Users only bet and claim - everything else is invisible
 
 ## 🏗️ Architecture
 
@@ -87,23 +89,25 @@ npm run format
 ### User Flow
 
 1. **Connect Wallet**: Users connect their Stellar testnet wallet
-2. **Select Currency Pair**: Choose from ARS/CHF, BRL/EUR, or MXN/XAU
-3. **Make Prediction**: Bet tokens on Rise, Fall, or Stable price movement
-4. **Wait 5 Minutes**: Battle automatically resolves after the time window
-5. **Claim Winnings**: Winners receive proportional rewards from the losing pool
+2. **View Current Round**: See round number and countdown timer (e.g., "3:10 minutes remaining")
+3. **Make Prediction**: Bet tokens on whether ARS will Rise, Fall, or stay Stable
+4. **Wait 5 Minutes**: Round automatically resolves after the time window
+5. **Claim Winnings**: Winners receive proportional rewards from the losing pools
 
-### Battle Mechanics
+### Betting Mechanics
 
 ```
-🎯 Example Battle Flow:
+🎯 Example Round Flow:
 
 User A bets 100 tokens: "ARS will RISE"
 User B bets 200 tokens: "ARS will FALL" 
 User C bets 50 tokens: "ARS will be STABLE"
 
 Total Pool: 350 tokens
-After 5 minutes: ARS rises by +0.08%
+Starting ARS price: $0.001025
+After 5 minutes: ARS price: $0.001076 (+4.97% change)
 
+Result: ARS RISES (>+0.05%)
 Winner: User A (Rise prediction)
 Fee (5%): 17.5 tokens  
 Distributable: 332.5 tokens
@@ -112,51 +116,52 @@ User A receives: 332.5 tokens (100% of winning pool)
 
 ### Auto-Settlement Process
 
-1. **Battle Creation**: First bet automatically creates a new battle
-2. **Price Recording**: Oracle captures starting price
-3. **Bet Aggregation**: Multiple users can join the same battle
-4. **Automatic Resolution**: After 5 minutes, contract fetches end price
-5. **Winner Calculation**: Determines winning prediction based on price change
-6. **Reward Distribution**: Winners split the losing pool proportionally
-7. **New Battle**: Next bet automatically starts a fresh battle
+1. **Round Creation**: First bet automatically creates a new round
+2. **Price Recording**: Oracle captures starting ARS price in USD
+3. **Bet Aggregation**: Multiple users can join the same round (5-minute window)
+4. **Automatic Resolution**: After 5 minutes, contract fetches final ARS price
+5. **Winner Calculation**: Determines winning prediction based on % price change
+6. **Reward Distribution**: Winners split the losing pools proportionally (minus 5% fee)
+7. **New Round**: Next bet automatically starts a fresh round
 
 ## 📊 Contract Interface
 
 ### Core Functions
 
 ```rust
-// Join or create a currency battle
-start_battle(user: Address, pair: CurrencyPair, chosen_currency: u32, amount: i128)
+// Place bet on ARS price movement (creates new round if none active)
+place_bet(user: Address, prediction: Prediction, amount: i128) -> u32
 
-// Settle completed battle and claim winnings  
-settle_battle(user: Address, pair: CurrencyPair)
+// Claim winnings from settled rounds
+claim_winnings(user: Address) -> i128
 
-// Get active battle information
-get_battle(pair: CurrencyPair) -> Battle
+// Get current round information
+get_current_round() -> Option<Round>
 
-// Get current currency prices
-get_pair_prices(pair: CurrencyPair) -> (i128, i128)
-
-// Get historical price data
-fetch_last_five_prices(ticker: Symbol) -> Vec<PriceData>
+// Get ARS price from oracle
+get_ars_price() -> i128
 ```
 
 ### Data Structures
 
 ```rust
-enum CurrencyPair { ArsChf, BrlEur, MxnXau }
+enum Prediction { Up, Down, Stable }
 
-struct Battle {
-    participants: Vec<Participant>,
+struct Round {
+    round_number: u32,
     start_time: u64,
-    start_prices: (i128, i128), 
+    start_price: i128,      // ARS price in USD (from oracle)
+    bets: Vec<Bet>,
+    up_pool: i128,          // Total tokens bet on "Up"
+    down_pool: i128,        // Total tokens bet on "Down" 
+    stable_pool: i128,      // Total tokens bet on "Stable"
     is_settled: bool,
-    winning_currency: Option<u32>
+    winning_prediction: Option<Prediction>
 }
 
-struct Participant {
+struct Bet {
     user: Address,
-    chosen_currency: u32,  // 0 or 1
+    prediction: Prediction, // Up, Down, or Stable
     amount: i128
 }
 ```
@@ -181,11 +186,15 @@ Access the comprehensive debugging interface at `/debug` route:
 ```typescript
 // Contract interaction pattern
 const client = new IncrementContract({ publicKey });
-const { result } = await client.start_battle({
+const { result } = await client.place_bet({
   user: publicKey,
-  pair: CurrencyPair.ArsChf, 
-  chosen_currency: 0,
+  prediction: Prediction.Up, 
   amount: BigInt(100)
+}, { simulate: true });
+
+// Claim winnings
+const winnings = await client.claim_winnings({
+  user: publicKey
 }, { simulate: true });
 ```
 
@@ -200,25 +209,3 @@ const { result } = await client.start_battle({
 ├── packages/increment/    # Generated contract bindings
 └── CLAUDE.md             # AI assistant instructions
 ```
-
-## 🔗 Resources
-
-- **Stellar Documentation**: [developers.stellar.org](https://developers.stellar.org)
-- **Reflector Oracle**: [reflector.network](https://reflector.network)
-- **Soroban Contracts**: [soroban.stellar.org](https://soroban.stellar.org)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-*Built for educational and testing purposes on Stellar testnet. Not for production use with real funds.*
