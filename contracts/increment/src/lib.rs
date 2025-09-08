@@ -179,10 +179,6 @@ impl Contract {
             .get::<DataKey, i128>(&DataKey::UserWinnings(user.clone()))
             .unwrap_or(0);
 
-        if winnings <= 0 {
-            return Err(Error::NoWinnings);
-        }
-
         // Clear user's winnings
         env.storage().instance().set(&DataKey::UserWinnings(user.clone()), &0i128);
 

@@ -123,14 +123,14 @@ export const CurrencyBattle: React.FC = () => {
   const getContract = () => {
     if (!address) return null;
     console.log("Creating contract client with:", {
-      contractId: "CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM",
+      contractId: "CC2AJHUB5VJTCPDGOEHV4YDCHHVYY3AN2L5ZM3OI37W5ED72BV3RS7VP",
       rpcUrl: network.rpcUrl,
       passphrase: network.passphrase,
       address: address
     });
     return new Client.Client({
       networkPassphrase: network.passphrase,
-      contractId: "CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM",
+      contractId: "CC2AJHUB5VJTCPDGOEHV4YDCHHVYY3AN2L5ZM3OI37W5ED72BV3RS7VP",
       rpcUrl: network.rpcUrl,
       publicKey: address,
       allowHttp: true,
@@ -401,7 +401,7 @@ export const CurrencyBattle: React.FC = () => {
   if (!address) {
     return (
       <div style={{ textAlign: "center", padding: "2rem" }}>
-        <h2>🏟️ Currency Clash Arena</h2>
+        {/* <h2>🏟️ Currency Clash Arena</h2> */}
         <p>Connect your wallet to start predicting ARS price movements!</p>
       </div>
     );
@@ -654,7 +654,7 @@ export const CurrencyBattle: React.FC = () => {
                   <div><strong>End Price:</strong> {formatPrice(currentRound.endPrice)}</div>
                 )}
                 <div><strong>Total Pool:</strong> ${currentRound.totalPool}</div>
-                <div><strong>Status:</strong> {currentRound.isSettled ? "🏁 Settled" : currentRound.isActive ? "⏳ Active" : "⏰ Ready to Settle"}</div>
+                {/* <div><strong>Status:</strong> {currentRound.isSettled ? "🏁 Settled" : currentRound.isActive ? "⏳ Active" : "⏰ Ready to Settle"}</div> */}
                 {currentRound.winningPrediction && (
                   <div style={{ color: getPredictionColor(currentRound.winningPrediction) }}>
                     <strong>Winner:</strong> {getPredictionIcon(currentRound.winningPrediction)} {currentRound.winningPrediction}
@@ -696,6 +696,32 @@ export const CurrencyBattle: React.FC = () => {
                   {" - "}
                   <strong>${userBet.amount}</strong>
                 </div>
+              </div>
+            )}
+
+            {/* Claim Winnings Button - Show when timer reaches zero */}
+            {!currentRound.isActive && currentRound.timeRemaining === 0 && userBet && userBet.roundNumber === currentRound.roundNumber && (
+              <div style={{ marginTop: "1rem" }}>
+                <button
+                  onClick={handleClaimWinnings}
+                  disabled={isLoading || isPrepareTxPending || isSubmitRpcPending}
+                  style={{
+                    width: "100%",
+                    padding: "1rem",
+                    borderRadius: "0.5rem",
+                    border: "none",
+                    fontSize: "1.1rem",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    backgroundColor: "#28a745",
+                    color: "white",
+                    opacity: (isLoading || isPrepareTxPending || isSubmitRpcPending) ? 0.6 : 1,
+                  }}
+                >
+                  {isLoading || isPrepareTxPending || isSubmitRpcPending
+                    ? "Checking..."
+                    : "💰 Check if I'm a winner"}
+                </button>
               </div>
             )}
           </div>

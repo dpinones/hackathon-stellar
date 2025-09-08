@@ -8,8 +8,8 @@ import Debugger from "./pages/Debugger.tsx";
 const AppLayout: React.FC = () => (
   <main>
     <Layout.Header
-      projectId="Currency Clash Arena"
-      projectTitle="🏟️ Currency Clash Arena"
+      projectId=""
+      projectTitle=""
       contentRight={
         <>
           <nav>

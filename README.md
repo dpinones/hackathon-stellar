@@ -1,199 +1,224 @@
-# Documento de Requisitos
+# Currency Clash Arena
 
-## Introducción
-La función de Lotería de ARS implementa un sistema de lotería gamificado y descentralizado en la aplicación Currency Clash Arena, centrado exclusivamente en la volatilidad del ARS (Peso Argentino) frente al USD. Los usuarios apuestan tokens de testnet para predecir si el ARS subirá (>+0.05%), bajará (<-0.05%) o se mantendrá estable (entre -0.05% y +0.05%) en un intervalo de 5 minutos, validado por el oráculo Reflector. Esto crea una experiencia adictiva y simple para un hackathon, con rondas rápidas y resolución automática, eliminando el concepto de "boletos" para que los usuarios apuesten directamente la cantidad de tokens deseada.
+**A gamified decentralized betting platform built on Stellar blockchain, focused on cryptocurrency volatility prediction.**
 
-El propósito es maximizar la simplicidad para un MVP funcional: solo una divisa (ARS, la más volátil), tres opciones de predicción, y acciones limitadas a apostar y reclamar.
+## 🎯 Overview
 
-## Requisitos
+Currency Clash Arena is a real-time betting application where users predict cryptocurrency price movements over 5-minute intervals. Players bet testnet tokens to forecast whether currencies will rise, fall, or remain stable, with outcomes validated by the Stelllar Reflector oracle system.
 
-### Requisito 1: Visualización de la Pantalla Principal
-**Historia de Usuario:** Como jugador, quiero ver la ronda actual y detalles relevantes, para entender el estado de la lotería y decidir apostar.
+### Key Features
 
-#### Criterios de Aceptación
-1. CUANDO el usuario accede a la pantalla principal, ENTONCES el sistema DEBERÁ mostrar el número de ronda actual y el temporizador de cuenta regresiva (e.g., "3:10 minutos restantes"). El valor inicial de ARS se obtendrá al inicio de la ronda y el final al pasar los 5 minutos.
+- **Fast-paced rounds**: 5-minute betting windows with instant settlement
+- **Three prediction types**: Rise (>+0.05%), Fall (<-0.05%), or Stable (-0.05% to +0.05%)
+- **Multiple currency pairs**: ARS/CHF, BRL/EUR, MXN/XAU
+- **Oracle-powered**: Real-time price data from Stellar Reflector
+- **Proportional rewards**: Winners share the losing pool proportionally
+- **Autonomous operation**: Fully decentralized with automatic settlement
 
-### Requisito 2: Mecanismo de Apostar
-**Historia de Usuario:** Como jugador, quiero apostar tokens para predecir el movimiento del ARS, para participar en la lotería de la ronda siguiente.
+## 🏗️ Architecture
 
-#### Criterios de Aceptación
-1. CUANDO el usuario selecciona "Apostar", ENTONCES el sistema DEBERÁ permitir elegir una opción (Sube, Baja, Estable), ingresar el monto en tokens y confirmar la apuesta.
-2. MIENTRAS la ronda está abierta para apuestas, EL sistema DEBERÁ agregar los tokens al pool correspondiente (Sube, Baja, o Estable) y actualizar los porcentajes de apuestas en tiempo real.
-3. CUANDO se confirma la apuesta, ENTONCES el sistema DEBERÁ escrow los tokens vía contrato inteligente y mostrar confirmación (e.g., "10 tokens en Baja para Ronda 43").
+### Smart Contract (Rust/Soroban)
+- **Location**: `contracts/increment/src/lib.rs`
+- **Network**: Stellar Testnet
+- **Contract ID**: `CC2AJHUB5VJTCPDGOEHV4YDCHHVYY3AN2L5ZM3OI37W5ED72BV3RS7VP`
+- **Native Token**: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
+- **Oracle**: `CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W`
 
-### Requisito 3: Integración con el Oráculo y Resolución de Ronda
-**Historia de Usuario:** Como jugador, quiero una resolución automática basada en datos reales, para que los resultados sean justos y transparentes.
+### Frontend (React + TypeScript)
+- **Framework**: Vite + React + TypeScript  
+- **Stellar SDK**: @stellar/stellar-sdk v14.0.0-rc.3
+- **Wallet Integration**: @creit.tech/stellar-wallets-kit
+- **UI Components**: @stellar/design-system
+- **Main Component**: `src/components/CurrencyBattle.tsx`
 
-#### Criterios de Aceptación
-1. CUANDO inicia la ronda, ENTONCES el sistema DEBERÁ fetch el valor inicial de ARS del oráculo Reflector (e.g., 0.000733 USD).
-2. SI el fetch del oráculo falla (e.g., timeout >10s), ENTONCES el sistema DEBERÁ cancelar la ronda, reembolsar apuestas y notificar a los usuarios.
-3. MIENTRAS el intervalo de 5 minutos transcurre, EL sistema DEBERÁ mantener el pool de apuestas bloqueado.
-4. CUANDO finaliza el intervalo, ENTONCES el sistema DEBERÁ fetch el nuevo valor de ARS, calcular % cambio ((nuevo - inicial)/inicial * 100), y determinar el resultado: Sube (>+0.05%), Baja (<-0.05%), o Estable (entre -0.05% y +0.05%).
-5. SI hay empate en el umbral (e.g., exactamente +0.05%), ENTONCES el sistema DEBERÁ clasificarlo como Estable por defecto.
+## 🚀 Quick Start
 
-### Requisito 4: Distribución de Ganancias y Reclamo
-**Historia de Usuario:** Como jugador, quiero reclamar mis ganancias fácilmente, para recibir recompensas tras una predicción correcta.
+### Prerequisites
+- Node.js 18+
+- Rust and Cargo
+- Stellar CLI
+- Freighter or Albedo wallet (testnet mode)
 
-#### Criterios de Aceptación
-1. CUANDO se resuelve la ronda, ENTONCES el sistema DEBERÁ identificar ganadores (e.g., todos en "Baja" si ARS bajó -0.546%) y calcular su porción proporcional del pool (minus 5% fee para la próxima ronda).
-2. SI no hay apuestas en la opción ganadora, ENTONCES el sistema DEBERÁ llevar el pool a la ronda siguiente.
-3. MIENTRAS las ganancias estén pendientes, EL sistema DEBERÁ activar el botón "Reclamar" en la pantalla principal.
-4. CUANDO el usuario selecciona "Reclamar", ENTONCES el sistema DEBERÁ transferir tokens vía contrato inteligente y mostrar notificación (e.g., "Ganaste 23.75 tokens").
-5. SI hay múltiples rondas pendientes, ENTONCES el sistema DEBERÁ permitir reclamos acumulativos.
+### Installation
 
+```bash
+# Clone repository
+git clone <repository-url>
+cd increment
 
+# Install dependencies
+npm install
+npm run install:contracts
 
-⏺ Flujo del Contrato - Perspectiva del Usuario vs Backend
+# Build contracts
+cd contracts/increment
+make build
+```
 
-  👤 Perspectiva del Usuario
+### Development
 
-  1. Usuario A - Primera Apuesta
+```bash
+# Start development server with contract watching
+npm run dev
 
-  Usuario A: "Apuesto 100 tokens que ARS sube"
-  → Llama: place_bet(userA, Up, 100)
-  → Ve: "Apuesta exitosa en ronda #1"
+# In separate terminal - watch and rebuild contracts
+stellar scaffold watch --build-clients
 
-  2. Usuario B - Se Une a la Ronda
+# Run tests
+cd contracts/increment
+make test
+```
 
-  Usuario B: "Apuesto 200 tokens que ARS baja"
-  → Llama: place_bet(userB, Down, 200) 
-  → Ve: "Apuesta exitosa en ronda #1"
+### Build & Deploy
 
-  3. Pasan 5+ Minutos - Momento de Claim
+```bash
+# Build for production
+npm run build
 
-  Usuario A: "Quiero mis ganancias"
-  → Llama: claim_winnings()
-  → Ve: "Recibiste 285 tokens" (si ganó)
+# Lint code
+npm run lint
 
-  ⚙️ Qué Pasa Por Detrás
+# Format code
+npm run format
+```
 
-  1. Primera Apuesta de Usuario A
+## 🎮 How It Works
 
-  place_bet(userA, Up, 100) {
-    // Backend detecta: No hay ronda activa
-    CurrentRound = None
+### User Flow
 
-    // AUTO-CREA RONDA:
-    RoundCounter: 0 → 1
-    CurrentRound = 1
+1. **Connect Wallet**: Users connect their Stellar testnet wallet
+2. **Select Currency Pair**: Choose from ARS/CHF, BRL/EUR, or MXN/XAU
+3. **Make Prediction**: Bet tokens on Rise, Fall, or Stable price movement
+4. **Wait 5 Minutes**: Battle automatically resolves after the time window
+5. **Claim Winnings**: Winners receive proportional rewards from the losing pool
 
-    Round(1) = {
-      round_number: 1,
-      start_time: ahora,
-      start_price: $0.001025 (del oracle),
-      bets: [userA, Up, 100],
-      up_pool: 100,
-      total_pool: 100
-    }
+### Battle Mechanics
 
-    // Escrow: 100 tokens userA → contrato
-    return 1  // "Apuesta en ronda #1"
-  }
+```
+🎯 Example Battle Flow:
 
-  2. Segunda Apuesta de Usuario B
+User A bets 100 tokens: "ARS will RISE"
+User B bets 200 tokens: "ARS will FALL" 
+User C bets 50 tokens: "ARS will be STABLE"
 
-  place_bet(userB, Down, 200) {
-    // Backend encuentra ronda activa
-    CurrentRound = 1
-    Round(1).start_time + 300 > ahora  // Aún acepta apuestas
+Total Pool: 350 tokens
+After 5 minutes: ARS rises by +0.08%
 
-    // ACTUALIZA RONDA EXISTENTE:
-    Round(1) = {
-      bets: [userA-Up-100, userB-Down-200],
-      up_pool: 100,
-      down_pool: 200,
-      total_pool: 300
-    }
+Winner: User A (Rise prediction)
+Fee (5%): 17.5 tokens  
+Distributable: 332.5 tokens
+User A receives: 332.5 tokens (100% of winning pool)
+```
 
-    // Escrow: 200 tokens userB → contrato
-    return 1  // "Apuesta en ronda #1"
-  }
+### Auto-Settlement Process
 
-  3. Pasan 5 Minutos - Auto-Settlement
+1. **Battle Creation**: First bet automatically creates a new battle
+2. **Price Recording**: Oracle captures starting price
+3. **Bet Aggregation**: Multiple users can join the same battle
+4. **Automatic Resolution**: After 5 minutes, contract fetches end price
+5. **Winner Calculation**: Determines winning prediction based on price change
+6. **Reward Distribution**: Winners split the losing pool proportionally
+7. **New Battle**: Next bet automatically starts a fresh battle
 
-  claim_winnings(userA) {
-    // AUTO-DETECTA RONDA LISTA:
-    CurrentRound = 1
-    Round(1).start_time + 300 < ahora  // >5min
-    Round(1).is_settled = false        // No resuelta
+## 📊 Contract Interface
 
-    // AUTO-SETTLEMENT INTERNO:
-    internal_settle_round(1) {
-      end_price = $0.001076 (oracle a los 5min exactos)
-      change = (1076-1025)/1025 * 10000 = 497 basis points
-      change > 5  // ARS subió >0.05%
+### Core Functions
 
-      winning_prediction = Up  // userA ganó!
+```rust
+// Join or create a currency battle
+start_battle(user: Address, pair: CurrencyPair, chosen_currency: u32, amount: i128)
 
-      // DISTRIBUCIÓN:
-      fee = 300 * 5% = 15 tokens (para contrato)
-      distributable = 285 tokens
+// Settle completed battle and claim winnings  
+settle_battle(user: Address, pair: CurrencyPair)
 
-      // userA apostó 100 de 100 total en "Up" = 100% del pool ganador
-      userA_winnings = (100 * 285) / 100 = 285 tokens
+// Get active battle information
+get_battle(pair: CurrencyPair) -> Battle
 
-      UserWinnings(userA) = 285
-      Round(1).is_settled = true
-    }
+// Get current currency prices
+get_pair_prices(pair: CurrencyPair) -> (i128, i128)
 
-    // CLAIM REAL:
-    winnings = UserWinnings(userA) = 285
-    UserWinnings(userA) = 0  // Clear
+// Get historical price data
+fetch_last_five_prices(ticker: Symbol) -> Vec<PriceData>
+```
 
-    // Transfer: contrato → userA (285 tokens)
-    return 285
-  }
+### Data Structures
 
-  4. Usuario C Apuesta Después - Nueva Ronda
+```rust
+enum CurrencyPair { ArsChf, BrlEur, MxnXau }
 
-  place_bet(userC, Stable, 150) {
-    // Backend detecta: Ronda actual está cerrada
-    CurrentRound = 1
-    Round(1).is_settled = true  // Ya resuelta
+struct Battle {
+    participants: Vec<Participant>,
+    start_time: u64,
+    start_prices: (i128, i128), 
+    is_settled: bool,
+    winning_currency: Option<u32>
+}
 
-    // AUTO-CREA NUEVA RONDA:
-    RoundCounter: 1 → 2
-    CurrentRound = 2
+struct Participant {
+    user: Address,
+    chosen_currency: u32,  // 0 or 1
+    amount: i128
+}
+```
 
-    Round(2) = {
-      round_number: 2,
-      start_time: ahora,
-      start_price: $0.001076 (precio actual),
-      bets: [userC, Stable, 150]
-    }
+## 🛠️ Development Tools
 
-    return 2  // "Apuesta en ronda #2"
-  }
+### Contract Testing
+```bash
+cd contracts/increment
+make build    # Build contract
+make test     # Run unit tests
+```
 
-  🔄 Ciclo Continuo
+### Debug Interface
+Access the comprehensive debugging interface at `/debug` route:
+- Contract method testing
+- Transaction simulation  
+- XDR viewers
+- State inspection
 
-  Estado del Storage tras estos eventos:
-  RoundCounter = 2          // 2 rondas creadas total
-  CurrentRound = 2          // Ronda activa para apuestas
-  Round(1) = {settled}      // Historia: ronda completada
-  Round(2) = {active}       // Actual: acepta apuestas
-  UserWinnings(userA) = 0   // Ya reclamó
-  UserWinnings(userB) = 0   // Perdió, no tiene nada
+### Frontend Integration
+```typescript
+// Contract interaction pattern
+const client = new IncrementContract({ publicKey });
+const { result } = await client.start_battle({
+  user: publicKey,
+  pair: CurrencyPair.ArsChf, 
+  chosen_currency: 0,
+  amount: BigInt(100)
+}, { simulate: true });
+```
 
-  ✨ Magia del Auto-Settlement
+## 📂 Project Structure
 
-  - Usuario no sabe: Que el settlement ocurrió automáticamente
-  - Ve simplemente: "Recibí mis ganancias"
-  - Backend maneja: Oracle, cálculos, distribución, nueva ronda
-  - Resultado: Experiencia fluida sin dependencias externas
+```
+├── contracts/increment/     # Rust smart contract
+├── src/components/         # React components  
+├── src/debug/             # Debug interface
+├── src/contracts/         # TypeScript contract clients
+├── contract-ids/          # Deployment configurations
+├── packages/increment/    # Generated contract bindings
+└── CLAUDE.md             # AI assistant instructions
+```
 
-  El contrato es completamente autónomo - los usuarios solo apuestan y
-  reclaman, todo lo demás es invisible.
+## 🔗 Resources
 
+- **Stellar Documentation**: [developers.stellar.org](https://developers.stellar.org)
+- **Reflector Oracle**: [reflector.network](https://reflector.network)
+- **Soroban Contracts**: [soroban.stellar.org](https://soroban.stellar.org)
 
+## 🤝 Contributing
 
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
- stellar contract invoke \
-  --id CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM \
-  --source-account bob \
-  --network testnet \
-  -- \
-  get_current_round
+## 📄 License
 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+---
 
+*Built for educational and testing purposes on Stellar testnet. Not for production use with real funds.*

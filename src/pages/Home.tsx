@@ -40,12 +40,10 @@ const Home: React.FC = () => {
           >
             <div style={{ fontSize: "8rem", marginBottom: "1rem" }}>🏟️</div>
             <h1 style={{ fontSize: "3.5rem", margin: 0, color: "#333" }}>
-              Currency Clash Arena
+              ARS Price Arena
             </h1>
             <p style={{ fontSize: "1.3rem", color: "#666", maxWidth: "600px", lineHeight: "1.6" }}>
-              Welcome to the ultimate head-to-head currency battle experience! 
-              Choose your champion currency and compete in thrilling 5-minute battles 
-              for glory and rewards.
+              Predict if ARS will rise, fall, or stay stable over 5 minutes!
             </p>
 
             {error && (
@@ -77,7 +75,7 @@ const Home: React.FC = () => {
               🔗 Connect Wallet to Enter Arena
             </Button>
 
-            <div
+            {/* <div
               style={{
                 marginTop: "3rem",
                 display: "grid",
@@ -107,7 +105,7 @@ const Home: React.FC = () => {
                   Celebrate victories with epic animations and effects
                 </p>
               </div>
-            </div>
+            </div> */}
           </div>
         </Layout.Inset>
       </Layout.Content>

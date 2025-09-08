@@ -11,7 +11,7 @@ Currency Clash Arena is a gamified decentralized betting application built on St
 ### Smart Contract (Rust/Soroban)
 - **Location**: `contracts/increment/src/lib.rs`
 - **Oracle Integration**: Uses Reflector oracle at `CCSSOHTBL3LEWUCBBEB5NJFC2OKFRC74OWEIJIZLRJBGAAU4VMU5NV4W` for price data
-- **Contract ID**: `CBOR3RRXFRXAYJH5B4JQC6BZTVJDRVXO2XHU4NCMQMG66M6GQUT4AJHM`
+- **Contract ID**: `CC2AJHUB5VJTCPDGOEHV4YDCHHVYY3AN2L5ZM3OI37W5ED72BV3RS7VP`
 - **Native Token**: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
 
 **Key Features**:
