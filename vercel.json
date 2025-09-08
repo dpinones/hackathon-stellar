@@ -1,4 +1,7 @@
 {
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
+    "installCommand": "npm install && npm run install:contracts",
     "rewrites": [
         { "source": "/(.*)", "destination": "/" }
     ]
